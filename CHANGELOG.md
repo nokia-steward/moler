@@ -1,3 +1,6 @@
+## moler 4.13.1
+* Preserve log paths when building compression commands
+
 ## moler 4.13.0
 * Add AT command for Fibocom devices, to get information about cell
 
