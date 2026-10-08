@@ -60,6 +60,22 @@ moler.cmd.at.exit\_serial\_proxy module
    :show-inheritance:
    :undoc-members:
 
+moler.cmd.at.fibocom\_get\_cell\_info module
+--------------------------------------------
+
+.. automodule:: moler.cmd.at.fibocom_get_cell_info
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+moler.cmd.at.fibocom\_ip\_pass\_through module
+----------------------------------------------
+
+.. automodule:: moler.cmd.at.fibocom_ip_pass_through
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
 moler.cmd.at.genericat module
 -----------------------------
 

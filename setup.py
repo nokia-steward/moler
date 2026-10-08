@@ -12,7 +12,7 @@ with io.open(join(getcwd(), 'requirements', 'base.txt'), encoding='utf-8') as f:
 
 setup(
     name='moler',
-    version='4.13.0',
+    version='4.13.1',
     description='Moler is a library for working with terminals, mainly for automated tests',  # Required
     long_description=long_description,
     long_description_content_type='text/markdown',
