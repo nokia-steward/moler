@@ -28,6 +28,14 @@ moler.util.compressed\_timed\_rotating\_file\_handler module
    :show-inheritance:
    :undoc-members:
 
+moler.util.compression\_command module
+--------------------------------------
+
+.. automodule:: moler.util.compression_command
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
 moler.util.connection\_observer module
 --------------------------------------
 
