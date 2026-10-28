@@ -143,6 +143,21 @@ def remove_window_title_codes(multiline):
     return multiline
 
 
+# ESC ] <string> BEL       Operating System Command (OSC) terminated by BEL.
+# ESC ] <string> ESC \     Operating System Command (OSC) terminated by ST, e.g. systemd shell context:
+#                          ESC ] 3008 ; start=<uuid>;user=<user>;...;type=shell ESC \
+_re_osc_codes = re.compile(r"\x1B\][^\x07\x1B]*(?:\x07|\x1B\\)")
+
+
+def remove_osc_codes(multiline):
+    """
+    :param multiline: string from terminal holding single or multiple lines
+    :return: line(s) without terminal OSC (Operating System Command) escape codes
+    """
+    multiline = _re_osc_codes.sub("", multiline)
+    return multiline
+
+
 # ESC [ <n> C    Cursor forward (Right) by <n>
 # ESC [ <n> X    Erase <n> characters from the current cursor position by overwriting them with a space character.
 _re_space_fill_to_right_margin = re.compile(r"(\x1B\[\d+[XC])+(\r|\n)")
@@ -190,6 +205,7 @@ def remove_all_known_special_chars(line):
     :return: line without all known special chars
     """
     line = remove_overwritten_left_write(line)
+    line = remove_osc_codes(line)
     line = remove_escape_codes(line)
     line = remove_window_title_codes(line)
     line = remove_terminal_last_cmd_status(line)
