@@ -1049,25 +1049,26 @@ class TextualDevice(AbstractDevice):
         state = occurrence["state"]
         line = occurrence["line"]
         matched = occurrence["matched"]
+        if self._check_all_prompts_on_line and len(occurrence["list_matched"]) > 1:
+            prompts = [{item["state"]: item["prompt_regex"]} for item in
+                       occurrence["list_matched"]]
+            self._log(
+                level=logging.WARNING,
+                msg=f"Prompts {prompts} match the same line '{line}'",
+            )
+            self._log(
+                level=logging.ERROR,
+                msg=f"More than 1 prompt matched the same line! '{occurrence}'.",
+            )
+            self.last_wrong_wait4_occurrence = occurrence
+            # Ambiguous line does not identify the state - changing it here would race with state machine transitions.
+            return
         msg = f"Callback for state {state} for line >>{line}<<, matched: '{matched}'."
         if self.current_state != state:
             self._log(level=logging.INFO, msg=msg)
             self._set_state(state)
         else:
             self._log(level=logging.DEBUG, msg=msg)
-        if self._check_all_prompts_on_line:
-            if len(occurrence["list_matched"]) > 1:
-                prompts = [{item["state"]: item["prompt_regex"]} for item in
-                           occurrence["list_matched"]]
-                self._log(
-                    level=logging.WARNING,
-                    msg=f"Prompts {prompts} match the same line '{line}'",
-                )
-                self._log(
-                    level=logging.ERROR,
-                    msg=f"More than 1 prompt matched the same line! '{occurrence}'.",
-                )
-                self.last_wrong_wait4_occurrence = occurrence
 
     def _get_for_state_to_run_prompts_observers(self):
         for_state = None
