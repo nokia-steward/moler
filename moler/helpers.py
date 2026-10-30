@@ -146,7 +146,7 @@ def remove_window_title_codes(multiline):
 # ESC ] <string> BEL       Operating System Command (OSC) terminated by BEL.
 # ESC ] <string> ESC \     Operating System Command (OSC) terminated by ST, e.g. systemd shell context:
 #                          ESC ] 3008 ; start=<uuid>;user=<user>;...;type=shell ESC \
-_re_osc_codes = re.compile(r"\x1B\][^\x07\x1B]*(?:\x07|\x1B\\)")
+_re_osc_codes = re.compile(r"\x1B\][^\x07\x1B\r\n]*(?:\x07|\x1B\\)")
 
 
 def remove_osc_codes(multiline):
@@ -207,8 +207,6 @@ def remove_all_known_special_chars(line):
     line = remove_overwritten_left_write(line)
     line = remove_osc_codes(line)
     line = remove_escape_codes(line)
-    line = remove_window_title_codes(line)
-    line = remove_terminal_last_cmd_status(line)
     line = remove_cursor_visibility_codes(line)
     line = remove_fill_spaces_right_codes(line)
     line = remove_text_formatting_codes(line)

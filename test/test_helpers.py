@@ -293,6 +293,20 @@ def test_remove_all_known_special_chars_removes_osc_codes():
     assert "adb_shell@1234567890 $ " == output
 
 
+def test_removal_osc_codes_does_not_cross_lines():
+    from moler.helpers import remove_osc_codes
+    multiline = "\x1b]0;broken title\r\nline1\r\nline2\x07prompt$ "
+    output = remove_osc_codes(multiline=multiline)
+    assert multiline == output
+
+
+def test_remove_all_known_special_chars_removes_title_and_notify_codes():
+    from moler.helpers import remove_all_known_special_chars
+    line = "\x1b]777;notify;Command completed;ls -l\x07\x1B]0;user@host: ~\x07user@host:~$ "
+    output = remove_all_known_special_chars(line)
+    assert "user@host:~$ " == output
+
+
 def test_convert_to_int():
     from moler.helpers import convert_to_int, compare_objects
 

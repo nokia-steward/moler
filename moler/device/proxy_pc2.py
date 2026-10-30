@@ -19,8 +19,10 @@ from moler.device.textualdevice import TextualDevice
 from moler.device.unixlocal import UnixLocal
 from moler.exceptions import MolerException
 try:
+    from moler.io.raw.terminal import ThreadedTerminal
     from moler.io.raw.terminal_no_fork import ThreadedTerminalNoFork
 except ImportError:  # ThreadedTerminal won't load on Windows
+    ThreadedTerminal = None
     ThreadedTerminalNoFork = None
 
 from moler.events.shared.wait4 import Wait4
@@ -43,7 +45,7 @@ def want_local_unix_state(io_type=None, io_connection=None):
     """
     if io_type == "terminal":
         return True
-    if (platform.system() != 'Windows') and isinstance(io_connection, ThreadedTerminalNoFork):
+    if (platform.system() != 'Windows') and isinstance(io_connection, (ThreadedTerminal, ThreadedTerminalNoFork)):
         return True
     else:  # all remote-access connections (tcp, udp, telnet, ssh); even connecting to localhost
         return False
