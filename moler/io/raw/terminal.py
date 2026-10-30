@@ -11,6 +11,7 @@ import datetime
 import logging
 import threading
 import time
+import warnings
 
 from ptyprocess import PtyProcessUnicode  # Unix-only
 
@@ -29,6 +30,9 @@ class ThreadedTerminal(IOConnection):
     Works on Unix (like Linux) systems only!
 
     ThreadedTerminal is shell working under Pty
+
+    .. deprecated::
+        Use :class:`moler.io.raw.terminal_no_fork.ThreadedTerminalNoFork` instead.
     """
 
     def __init__(
@@ -54,10 +58,13 @@ class ThreadedTerminal(IOConnection):
         :param dimensions: dimensions of the psuedoterminal
         :param terminal_delayafterclose: delay for checking if terminal was properly closed
         """
-        super().__init__(moler_connection=moler_connection)
-        self.logger.warning(
-            "ThreadedTerminal - deprecated implementation. For backward compatibility only. Will be deleted soon."
+        deprecation_msg = (
+            "ThreadedTerminal is deprecated and will be removed in a future release."
+            " Use ThreadedTerminalNoFork (moler.io.raw.terminal_no_fork) instead."
         )
+        warnings.warn(deprecation_msg, DeprecationWarning, stacklevel=2)
+        super().__init__(moler_connection=moler_connection)
+        self.logger.warning(deprecation_msg)
         self.debug_hex_on_non_printable_chars = (
             False  # Set True to log incoming non printable chars as hex.
         )

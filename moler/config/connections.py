@@ -88,6 +88,7 @@ def mlr_conn_no_encoding_partial_clean_vt100(moler_conn_class, name):
     from moler.helpers import remove_fill_spaces_right_codes
     from moler.helpers import remove_cursor_visibility_codes
     from moler.helpers import remove_window_title_codes
+    from moler.helpers import remove_osc_codes
     from moler.helpers import remove_overwritten_left_write
 
     def vt100_cleaner(data):
@@ -96,6 +97,7 @@ def mlr_conn_no_encoding_partial_clean_vt100(moler_conn_class, name):
         decoded = remove_fill_spaces_right_codes(multiline=decoded)
         decoded = remove_cursor_visibility_codes(multiline=decoded)
         decoded = remove_window_title_codes(multiline=decoded)
+        decoded = remove_osc_codes(multiline=decoded)
         return decoded
 
     return moler_conn_class(name=name, decoder=vt100_cleaner)
