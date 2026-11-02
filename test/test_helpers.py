@@ -270,6 +270,43 @@ def test_removal_window_title_codes():
     assert "\n" == output2
 
 
+def test_removal_osc_codes():
+    from moler.helpers import remove_osc_codes
+    line = ("\x1b]3008;start=98210760-26cd-436d-9de6-aa0bf803638f;machineid=0f7649834d2c436391726847da57e6ad;"
+            "user=adbshell;hostname=runnervmr9t6g;pid=00000000000000008416;type=shell;cwd=/home/adbshell\x1b\\"
+            "adb_shell@1234567890 $ ")
+    output = remove_osc_codes(multiline=line)
+    assert "adb_shell@1234567890 $ " == output
+    multiline = ("DETECTING PROMPT\r\n\x1b]3008;end=65d30273-b1e9-4ac8-9b05-76e5be610a17;exit=success\x1b\\"
+                 "\x1b]3008;start=c675b26a-1a9e-40bd-a5e3-17c282f64748;user=molerssh;type=shell;cwd=/home/molerssh\x1b\\"
+                 "molerssh@runnervmr9t6g:~$ \r\n\x1B]0;~\x07")
+    output2 = remove_osc_codes(multiline=multiline)
+    assert "DETECTING PROMPT\r\nmolerssh@runnervmr9t6g:~$ \r\n" == output2
+
+
+def test_remove_all_known_special_chars_removes_osc_codes():
+    from moler.helpers import remove_all_known_special_chars
+    line = ("\x1b]3008;end=ad52ef26-cc63-4159-ba80-8d2ff91a1b38;exit=failure;status=1\x1b\\"
+            "\x1b]3008;start=98210760-26cd-436d-9de6-aa0bf803638f;user=adbshell;type=shell;cwd=/home/adbshell\x1b\\"
+            "\x1B[32madb_shell@1234567890 $\x1B[m ")
+    output = remove_all_known_special_chars(line)
+    assert "adb_shell@1234567890 $ " == output
+
+
+def test_removal_osc_codes_does_not_cross_lines():
+    from moler.helpers import remove_osc_codes
+    multiline = "\x1b]0;broken title\r\nline1\r\nline2\x07prompt$ "
+    output = remove_osc_codes(multiline=multiline)
+    assert multiline == output
+
+
+def test_remove_all_known_special_chars_removes_title_and_notify_codes():
+    from moler.helpers import remove_all_known_special_chars
+    line = "\x1b]777;notify;Command completed;ls -l\x07\x1B]0;user@host: ~\x07user@host:~$ "
+    output = remove_all_known_special_chars(line)
+    assert "user@host:~$ " == output
+
+
 def test_convert_to_int():
     from moler.helpers import convert_to_int, compare_objects
 

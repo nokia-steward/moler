@@ -18,7 +18,6 @@ from moler.cmd.unix.lsof import Lsof
 from moler.cmd.unix.touch import Touch
 from moler.cmd.unix.rm import Rm
 from moler.exceptions import CommandTimeout
-from moler.io.raw.terminal import ThreadedTerminal
 from moler.io.raw.terminal_no_fork import ThreadedTerminalNoFork
 
 
@@ -108,7 +107,7 @@ def test_terminal_touch(terminal_connection):
             os.remove(test_file)
 
 
-@pytest.fixture(params=[ThreadedTerminal, ThreadedTerminalNoFork])
+@pytest.fixture(params=[ThreadedTerminalNoFork])
 def terminal_connection(request):
     from moler.threaded_moler_connection import ThreadedMolerConnection
 

@@ -212,18 +212,39 @@ def _perform_device_tests(
             )
             tested.add((source_state, target_state))
 
-            if device.last_wrong_wait4_occurrence is not None:
-                prompts = [{item["state"]: item["prompt_regex"]} for item in
-                           device.last_wrong_wait4_occurrence["list_matched"]]
-                msg = f"More than 1 prompt match the same line!: {prompts} in line '{device.last_wrong_wait4_occurrence['line']}' '{device.last_wrong_wait4_occurrence}' in change state '{state_before_test}' -> '{source_state}' -> '{target_state}'"
-                raise MolerException(msg)
+            _raise_if_wrong_wait4_occurrence(device, state_before_test, source_state, target_state)
         except Exception as exc:
+            if device.last_wrong_wait4_occurrence is not None and not _is_wrong_wait4_exception(exc):
+                try:
+                    _raise_if_wrong_wait4_occurrence(device, state_before_test, source_state, target_state)
+                except MolerException as wrong_wait4_exc:
+                    raise MolerException(
+                        f"Cannot trigger change state: '{source_state}' -> '{target_state}'. Successful tests: {test_nr}\n{wrong_wait4_exc}\nOriginal exception: {exc}\nAlready tested '{tested}'."
+                    ) from exc
             raise MolerException(
                 f"Cannot trigger change state: '{source_state}' -> '{target_state}'. Successful tests: {test_nr}\n{exc}\nAlready tested '{tested}'."
             ) from exc
         test_nr += 1
         if max_time is not None and time.monotonic() - start_time > max_time:
             return
+
+
+_WRONG_WAIT4_MSG = "More than 1 prompt match the same line!"
+
+
+def _is_wrong_wait4_exception(exc):
+    return _WRONG_WAIT4_MSG in str(exc)
+
+
+def _raise_if_wrong_wait4_occurrence(device, state_before_test, source_state, target_state):
+    occurrence = device.last_wrong_wait4_occurrence
+    if occurrence is None:
+        return
+    prompts = [{item["state"]: item["prompt_regex"]} for item in occurrence["list_matched"]]
+    raise MolerException(
+        f"{_WRONG_WAIT4_MSG}: {prompts} in line '{occurrence['line']}' '{occurrence}' in change state "
+        f"'{state_before_test}' -> '{source_state}' -> '{target_state}'"
+    )
 
 
 def get_device(name, connection, device_output, test_file_path):
