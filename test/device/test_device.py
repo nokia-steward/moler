@@ -302,6 +302,41 @@ def test_device_remove_does_not_close_connection_shared_with_neighbour(buffer_co
         shutdown.assert_called_once_with()
 
 
+def test_device_remove_of_shared_connection_hands_it_over_to_neighbour(buffer_connection):
+    import mock
+    from moler.device.unixlocal import UnixLocal
+    dev1 = UnixLocal(io_connection=buffer_connection, name="HAND_OVER_SHARED_1")
+    dev2 = UnixLocal(io_connection=buffer_connection, name="HAND_OVER_SHARED_2")
+    dev1.add_neighbour_device(neighbour_device=dev2, bidirectional=True)
+    moler_connection = buffer_connection.moler_connection
+    assert moler_connection.data_logger is dev2.device_data_logger
+    cmd_params = {"prompt": r"^moler_bash#"}
+    cmd1 = dev1.get_cmd(cmd_name="ls", cmd_params=cmd_params, check_state=False, for_state="UNIX_LOCAL")
+    cmd2 = dev2.get_cmd(cmd_name="ls", cmd_params=cmd_params, check_state=False, for_state="UNIX_LOCAL")
+
+    with mock.patch.object(buffer_connection, "close"), mock.patch.object(moler_connection, "shutdown"):
+        dev2.remove()
+
+        assert cmd2.cancelled()
+        assert not cmd1.done()
+        assert moler_connection.data_logger is dev1.device_data_logger
+        assert buffer_connection.name == "HAND_OVER_SHARED_1"
+        assert moler_connection.name == "HAND_OVER_SHARED_1"
+        dev1.remove()
+
+
+def test_removed_device_does_not_recover_kept_state(buffer_connection):
+    from moler.device.unixlocal import UnixLocal
+    dev = UnixLocal(io_connection=buffer_connection, name="REMOVED_NO_RECOVER")
+    dev.remove()
+    dev._kept_state = "UNIX_LOCAL"  # As set by goto state thread outliving remove().
+
+    dev._set_state("NOT_CONNECTED")
+
+    assert dev._thread_for_goto_state is None
+    assert dev._queue_states.empty()
+
+
 def test_device_remove_twice_closes_connection_only_once(buffer_connection):
     import mock
     from moler.device.unixlocal import UnixLocal

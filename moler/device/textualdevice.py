@@ -21,6 +21,7 @@ import re
 import threading
 import time
 import traceback
+import weakref
 
 from moler.config.loggers import change_logging_suffix, close_device_logger, configure_device_logger
 from moler.connection_factory import get_connection
@@ -109,6 +110,8 @@ class TextualDevice(AbstractDevice):
         self._reverse_state_prompts_dict = {}
         self._prompts_event = None
         self._kept_state = None
+        self._removed = False
+        self._created_observers = weakref.WeakSet()  # Commands and events created by this device.
         self._configurations = {}
         self._newline_chars = {}  # key is state, value is chars to send as newline
         if io_connection:
@@ -139,7 +142,6 @@ class TextualDevice(AbstractDevice):
         self._default_prompt = re.compile(r"^[^<]*[\$|%|#|>|~]\s*$")
         self._neighbour_devices = None
         self._established = False
-        self._removed = False
         self._goto_state_thread_join_timeout = 10  # Max time [s] for remove() to wait for goto state thread.
         msg = f"Created device '{self.name}' as instance of class '{self.__class__.__module__}.{self.__class__.__name__}'."
         self._log(level=logging.DEBUG, msg=msg)
@@ -248,8 +250,9 @@ class TextualDevice(AbstractDevice):
 
         try:
             self._stop_goto_state_thread(timeout=self._goto_state_thread_join_timeout)
-            if self._is_io_connection_used_by_neighbours():
-                self._release_shared_connection()
+            sharing_neighbour = self._get_neighbour_sharing_io_connection()
+            if sharing_neighbour is not None:
+                self._release_shared_connection(neighbour_device=sharing_neighbour)
             else:
                 try:
                     self._close_owned_connection()
@@ -293,32 +296,70 @@ class TextualDevice(AbstractDevice):
         else:
             self._close_connection(None, None, None)
 
-    def _release_shared_connection(self):
+    def _release_shared_connection(self, neighbour_device):
         """
         Detaches the device from io_connection that is shared with a neighbour device. The connection is neither
-        closed nor shut down since the neighbour device still uses it.
+        closed nor shut down since the neighbour device still uses it. Only commands and events created by this device
+        are cancelled. Connection name and data logger are handed over to the neighbour device.
 
+        :param neighbour_device: neighbour device that uses the same io_connection.
         :return: None
         """
         self._log(
             level=logging.INFO,
-            msg=f"Connection of device '{self.name}' is shared with a neighbour device, so it is not closed.",
+            msg=f"Connection of device '{self.name}' is shared with device '{neighbour_device.name}', so it is not"
+                f" closed.",
         )
         self._stop_prompts_observers()
+        self._cancel_created_observers()
         self._established = False
         self._set_state(TextualDevice.not_connected)
+        self._hand_over_shared_connection(neighbour_device=neighbour_device)
 
-    def _is_io_connection_used_by_neighbours(self):
+    def _cancel_created_observers(self):
         """
-        Checks if any neighbour device uses the same io_connection as this device. If so then moler connection must
+        Cancels not finished commands and events created by this device.
+
+        :return: None
+        """
+        for observer in list(self._created_observers):
+            try:
+                if observer.cancel():
+                    self._log(level=logging.INFO, msg=f"Cancelled '{observer}' while removing device '{self.name}'.")
+            except Exception as ex:  # pylint: disable=broad-except
+                self._log(level=logging.WARNING, msg=f"Cannot cancel '{observer}': {ex!r}.")
+        self._created_observers.clear()
+
+    def _hand_over_shared_connection(self, neighbour_device):
+        """
+        Makes the connection log its data to the neighbour device and use its name, if they are set to this device.
+        Otherwise data of the neighbour device would be logged to the logger closed by remove().
+
+        :param neighbour_device: neighbour device that uses the same io_connection.
+        :return: None
+        """
+        moler_connection = self.io_connection.moler_connection
+        neighbour_logger = getattr(neighbour_device, "device_data_logger", None)
+        if neighbour_logger is not None and moler_connection.data_logger is self.device_data_logger:
+            moler_connection.set_data_logger(neighbour_logger)
+        if self.io_connection.name == self.name:
+            self.io_connection.name = neighbour_device.name
+        if moler_connection.name == self.name:
+            moler_connection.name = neighbour_device.name
+
+    def _get_neighbour_sharing_io_connection(self):
+        """
+        Finds neighbour device that uses the same io_connection as this device. If found then moler connection must
         not be shut down since it would finish observers of the neighbour device.
 
-        :return: True if io_connection is shared with a neighbour device, False otherwise.
+        :return: neighbour device that shares io_connection or None if io_connection is not shared.
         """
         for neighbour_device in self._neighbour_devices or []:
+            if getattr(neighbour_device, "_removed", False) is True:
+                continue
             if getattr(neighbour_device, "io_connection", None) is self.io_connection:
-                return True
-        return False
+                return neighbour_device
+        return None
 
     def _stop_goto_state_thread(self, timeout=10):
         """
@@ -629,6 +670,9 @@ class TextualDevice(AbstractDevice):
 
     def _recover_state(self, state, keep_state=True):
         if self._goto_state_in_production_mode is False:
+            return
+        if self._removed:
+            # A goto state thread outliving remove() may still set _kept_state. Removed device must not change state.
             return
         with self._goto_state_thread_manipulation_lock:
             state_options = {
@@ -1009,6 +1053,7 @@ class TextualDevice(AbstractDevice):
                     raise exc
 
             observer._validate_start = validate_device_state_before_observer_start  # pylint: disable=protected-access
+        self._created_observers.add(observer)
         return observer
 
     def get_cmd(self, cmd_name, cmd_params=None, check_state=True, for_state=None):
