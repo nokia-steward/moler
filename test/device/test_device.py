@@ -223,8 +223,10 @@ def test_device_remove_shuts_down_moler_connection(buffer_connection):
 def test_device_remove_of_established_device_closes_and_cleans_up(configure_net_1_connection):
     import mock
     from moler.device.unixlocal import UnixLocal
-    dev = UnixLocal.from_named_connection(connection_name='net_1')
-    neighbour = UnixLocal.from_named_connection(connection_name='net_1')
+    from moler.connection_factory import get_connection
+    # Unique name so devices leaked by other tests do not share (and keep open) the logger of this test.
+    dev = UnixLocal(io_connection=get_connection(name='net_1'), name="REMOVE_ESTABLISHED")
+    neighbour = UnixLocal(io_connection=get_connection(name='net_1'), name="REMOVE_ESTABLISHED")
     dev.add_neighbour_device(neighbour_device=neighbour, bidirectional=True)
     callback = mock.Mock()
     dev.register_device_removal_callback(callback)
@@ -242,7 +244,25 @@ def test_device_remove_of_established_device_closes_and_cleans_up(configure_net_
     assert dev.on_connection_lost not in io_connection._disconnect_subscribers
     assert [] == neighbour.get_neighbour_devices(device_type=None)
     assert 1 == callback.call_count
+    # Devices of the same name share logger, so it must stay open until the last device is removed.
+    assert dev.device_data_logger.handlers
+    neighbour.remove()
     assert [] == dev.device_data_logger.handlers
+
+
+def test_device_remove_closes_connection_directly_if_leaving_states_fails(configure_net_1_connection):
+    import mock
+    from moler.device.unixlocal import UnixLocal
+    dev = UnixLocal.from_named_connection(connection_name='net_1')
+    dev.establish_connection()
+    io_connection = dev.io_connection
+
+    with mock.patch.object(dev, "goto_state", side_effect=RuntimeError("cannot leave state")):
+        dev.remove()
+
+    assert not dev.has_established_connection()
+    assert "NOT_CONNECTED" == dev.current_state
+    assert not io_connection.moler_connection.is_open()
 
 
 def test_device_remove_does_cleanup_even_if_closing_connection_fails(buffer_connection):
@@ -263,7 +283,7 @@ def test_device_remove_does_cleanup_even_if_closing_connection_fails(buffer_conn
     assert [] == logger.handlers
 
 
-def test_device_remove_does_not_shutdown_moler_connection_shared_with_neighbour(buffer_connection):
+def test_device_remove_does_not_close_connection_shared_with_neighbour(buffer_connection):
     import mock
     from moler.device.unixlocal import UnixLocal
     dev1 = UnixLocal(io_connection=buffer_connection, name="REMOVE_SHARED_1")
@@ -271,12 +291,78 @@ def test_device_remove_does_not_shutdown_moler_connection_shared_with_neighbour(
     dev1.add_neighbour_device(neighbour_device=dev2, bidirectional=True)
     moler_connection = buffer_connection.moler_connection
 
-    # io close() of some connections shuts moler connection down by itself - here only the device's own shutdown is checked
-    with mock.patch.object(buffer_connection, "close"), mock.patch.object(moler_connection, "shutdown") as shutdown:
+    with mock.patch.object(buffer_connection, "close") as close, \
+            mock.patch.object(moler_connection, "shutdown") as shutdown:
         dev1.remove()
+        close.assert_not_called()
         shutdown.assert_not_called()
+        assert "NOT_CONNECTED" == dev1.current_state
         dev2.remove()
+        close.assert_called_once_with()
         shutdown.assert_called_once_with()
+
+
+def test_device_remove_twice_closes_connection_only_once(buffer_connection):
+    import mock
+    from moler.device.unixlocal import UnixLocal
+    dev = UnixLocal(io_connection=buffer_connection, name="REMOVE_TWICE")
+
+    with mock.patch.object(buffer_connection, "close") as close:
+        dev.remove()
+        dev.remove()
+
+    close.assert_called_once_with()
+
+
+def test_device_remove_calls_all_removal_callbacks_even_if_one_fails(buffer_connection):
+    import mock
+    from moler.device.unixlocal import UnixLocal
+    dev = UnixLocal(io_connection=buffer_connection, name="REMOVE_FAILING_CALLBACK")
+    failing_callback = mock.Mock(side_effect=RuntimeError("callback failed"))
+    other_callback = mock.Mock()
+    dev.register_device_removal_callback(failing_callback)
+    dev.register_device_removal_callback(other_callback)
+    logger = dev.device_data_logger
+
+    with pytest.raises(RuntimeError, match="callback failed"):
+        dev.remove()
+
+    assert 1 == failing_callback.call_count
+    assert 1 == other_callback.call_count
+    assert [] == logger.handlers
+
+
+def test_removed_device_is_not_returned_as_neighbour_of_one_directional_link(buffer_connection):
+    from moler.device.unixlocal import UnixLocal
+    dev1 = UnixLocal(io_connection=buffer_connection, name="REMOVE_ONE_WAY_1")
+    dev2 = UnixLocal(io_connection=buffer_connection, name="REMOVE_ONE_WAY_2")
+    dev1.add_neighbour_device(neighbour_device=dev2, bidirectional=False)
+    assert [dev2] == dev1.get_neighbour_devices(device_type=None)
+
+    dev2.remove()
+
+    assert [] == dev1.get_neighbour_devices(device_type=None)
+    assert [] == dev1.get_neighbour_devices(device_type=UnixLocal)
+    dev1.remove()
+
+
+def test_device_logger_shared_by_devices_of_the_same_name_is_closed_by_the_last_one():
+    from moler.config.loggers import active_loggers, close_device_logger, configure_device_logger
+    logger = configure_device_logger(connection_name="REMOVE_SHARED_LOGGER")
+    try:
+        assert logger is configure_device_logger(connection_name="REMOVE_SHARED_LOGGER")
+        assert logger.handlers
+
+        close_device_logger(logger)
+        assert logger.handlers
+        assert logger.name in active_loggers
+
+        close_device_logger(logger)
+        assert [] == logger.handlers
+        assert logger.name not in active_loggers
+    finally:
+        close_device_logger(logger)
+
 
 # --------------------------- resources ---------------------------
 

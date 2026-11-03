@@ -139,6 +139,8 @@ class TextualDevice(AbstractDevice):
         self._default_prompt = re.compile(r"^[^<]*[\$|%|#|>|~]\s*$")
         self._neighbour_devices = None
         self._established = False
+        self._removed = False
+        self._goto_state_thread_join_timeout = 10  # Max time [s] for remove() to wait for goto state thread.
         msg = f"Created device '{self.name}' as instance of class '{self.__class__.__module__}.{self.__class__.__name__}'."
         self._log(level=logging.DEBUG, msg=msg)
         self._public_name = None
@@ -228,28 +230,35 @@ class TextualDevice(AbstractDevice):
     def remove(self, stack_limit=6):
         """
         Closes device, if any command or event is attached to this device they will be finished.
-        Device owns its connection so the connection is closed and the moler connection is shut down, unless
-        the connection is shared with a neighbour device (then only closing is done). Cleanup (unsubscribing,
+        Device owns its connection so the connection is closed and the moler connection is shut down. If the
+        connection is shared with a neighbour device then it is left open (the neighbour still uses it) - the device
+        only stops its own observers and the last device using the connection closes it. Cleanup (unsubscribing,
         unlinking neighbours, removal callbacks, closing logger) is done even if closing the connection fails.
+        Removing of already removed device does nothing.
 
         :param stack_limit: how many stack frames to keep. If None then all stack frames are kept.
         :return: None
         """
+        if self._removed:
+            self._log(level=logging.DEBUG, msg=f"Device '{self.name}' is already removed.")
+            return
+        self._removed = True
         mg = pformat(traceback.format_list(traceback.extract_stack(limit=stack_limit))[::-1])
         self._log(level=logging.INFO, msg=f"Device '{self.name}' is about to remove. Requested by: {mg}\n(...)")
 
         try:
-            self._stop_goto_state_thread()
-            if self.has_established_connection():
-                try:
-                    self.goto_state(TextualDevice.not_connected, rerun=5)
-                except DeviceChangeStateFailure:
-                    self._close_connection(None, None, None)
+            self._stop_goto_state_thread(timeout=self._goto_state_thread_join_timeout)
+            if self._is_io_connection_used_by_neighbours():
+                self._release_shared_connection()
             else:
-                self._close_connection(None, None, None)
-            self._set_state(TextualDevice.not_connected)
-            if not self._is_io_connection_used_by_neighbours():
-                self.io_connection.moler_connection.shutdown()
+                try:
+                    self._close_owned_connection()
+                finally:
+                    # Even if closing failed the moler connection must be shut down to finish observers.
+                    try:
+                        self._set_state(TextualDevice.not_connected)
+                    finally:
+                        self.io_connection.moler_connection.shutdown()
         finally:
             # Cleanup below must be done even if closing of the connection failed. Otherwise removal callbacks
             # (for example forgetting the device by Device registry) would not be called and logs would stay open.
@@ -263,6 +272,41 @@ class TextualDevice(AbstractDevice):
                 finally:
                     self._log(level=logging.INFO, msg=f"Device '{self.name}' is closed.")
                     self._close_logger()
+
+    def _close_owned_connection(self):
+        """
+        Leaves all states of the device and closes the connection. If leaving states fails (for any reason) then the
+        connection is closed directly.
+
+        :return: None
+        """
+        if self.has_established_connection():
+            try:
+                self.goto_state(TextualDevice.not_connected, rerun=5)
+            except Exception as ex:  # pylint: disable=broad-except
+                self._log(
+                    level=logging.WARNING,
+                    msg=f"Cannot go to state '{TextualDevice.not_connected}' while removing device '{self.name}': "
+                        f"{ex!r}. Closing connection directly.",
+                )
+                self._close_connection(None, None, None)
+        else:
+            self._close_connection(None, None, None)
+
+    def _release_shared_connection(self):
+        """
+        Detaches the device from io_connection that is shared with a neighbour device. The connection is neither
+        closed nor shut down since the neighbour device still uses it.
+
+        :return: None
+        """
+        self._log(
+            level=logging.INFO,
+            msg=f"Connection of device '{self.name}' is shared with a neighbour device, so it is not closed.",
+        )
+        self._stop_prompts_observers()
+        self._established = False
+        self._set_state(TextualDevice.not_connected)
 
     def _is_io_connection_used_by_neighbours(self):
         """
@@ -349,7 +393,8 @@ class TextualDevice(AbstractDevice):
                 for device in self._neighbour_devices:
                     if isinstance(device, device_type):
                         neighbour_devices.append(device)
-        return neighbour_devices
+        # Skip removed devices, they may still be referenced by one-directional links.
+        return [device for device in neighbour_devices if getattr(device, "_removed", False) is not True]
 
     def calc_timeout_for_command(self, passed_timeout, configurations):
         command_timeout = None

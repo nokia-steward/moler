@@ -226,5 +226,13 @@ class AbstractDevice:
         """
         callbacks = self._remove_callbacks
         self._remove_callbacks = []
+        first_exception = None
         for callback in callbacks:
-            callback()
+            # One failing callback must not prevent calling the others (they are not kept for a retry).
+            try:
+                callback()
+            except Exception as ex:  # pylint: disable=broad-except
+                if first_exception is None:
+                    first_exception = ex
+        if first_exception is not None:
+            raise first_exception
