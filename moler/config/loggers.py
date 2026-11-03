@@ -781,6 +781,23 @@ def configure_device_logger(connection_name, propagate=False):
     return logger
 
 
+def close_device_logger(logger):
+    """
+    Close and detach all handlers of device logger and forget the logger, so a device created later with the same
+    name gets freshly configured handlers.
+    :param logger: logger returned by configure_device_logger.
+    :return: None
+    """
+    for handler in list(logger.handlers):
+        logger.removeHandler(handler)
+        try:
+            handler.close()
+        except Exception:  # pylint: disable=broad-except
+            pass
+    active_loggers.discard(logger.name)
+    _logging_suffixes.pop(logger.name, None)
+
+
 def _prepare_logs_folder(logfile_full_path):
     """
     Checks that log folder exist and creates it if needed

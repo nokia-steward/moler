@@ -184,6 +184,22 @@ class AsyncioInThreadTerminal(IOConnection):
         """
         self._async_terminal.notify(callback, when)
 
+    def unsubscribe_on_connection_made(self, subscriber):
+        """
+        Remove subscriber from list of functions to call when connection is open/established
+        :param subscriber: reference to function registered by method notify
+        :return: None
+        """
+        self._async_terminal.unsubscribe_on_connection_made(subscriber)
+
+    def unsubscribe_on_connection_lost(self, subscriber):
+        """
+        Remove subscriber from list of functions to call when connection is closed/disconnected
+        :param subscriber: reference to function registered by method notify
+        :return: None
+        """
+        self._async_terminal.unsubscribe_on_connection_lost(subscriber)
+
     @property
     def name(self):
         return self._async_terminal.name

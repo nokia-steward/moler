@@ -209,4 +209,5 @@ class IOConnection:
 
     def _unsubscribe(self, lock: Lock, subscribers: List[Callable], subscriber: Callable) -> None:
         with lock:
-            subscribers.remove(subscriber)
+            if subscriber in subscribers:
+                subscribers.remove(subscriber)

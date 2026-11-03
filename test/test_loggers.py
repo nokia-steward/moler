@@ -378,6 +378,29 @@ def test_reopen_with_new_suffix_skips_foreign_file_handler(tmp_path, monkeypatch
         logger.handlers = []
 
 
+def test_close_device_logger_closes_handlers_and_forgets_logger(tmp_path, monkeypatch):
+    import moler.config.loggers as m_logger
+
+    logger_name = "closed_device_logger"
+    logger = logging.getLogger(logger_name)
+    logger.handlers = []
+
+    handler = logging.FileHandler(filename=str(tmp_path / "device.log"))
+    logger.addHandler(handler)
+    monkeypatch.setattr(m_logger, "active_loggers", {logger_name, "other_logger"})
+    monkeypatch.setattr(m_logger, "_logging_suffixes", {logger_name: ".suffix", "other_logger": ".suffix"})
+
+    try:
+        m_logger.close_device_logger(logger)
+        assert [] == logger.handlers
+        assert handler.stream is None
+        assert {"other_logger"} == m_logger.active_loggers
+        assert {"other_logger": ".suffix"} == m_logger._logging_suffixes
+    finally:
+        handler.close()
+        logger.handlers = []
+
+
 def test_reconfigure_logging_path_skips_foreign_file_handler(tmp_path, monkeypatch):
     import moler.config.loggers as m_logger
 

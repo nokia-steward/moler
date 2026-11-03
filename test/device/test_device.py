@@ -112,6 +112,138 @@ def test_device_logging_suffix(buffer_connection):
     for logger_name in moler.config.loggers._logging_suffixes.keys():
         assert None is moler.config.loggers._logging_suffixes[logger_name]
 
+
+def test_device_remove_unsubscribes_from_io_connection(buffer_connection):
+    from moler.device.unixlocal import UnixLocal
+    dev = UnixLocal(io_connection=buffer_connection, name="REMOVE_UNSUBSCRIBE")
+    assert dev.on_connection_made in buffer_connection._connect_subscribers
+    assert dev.on_connection_lost in buffer_connection._disconnect_subscribers
+
+    dev.remove()
+
+    assert dev.on_connection_made not in buffer_connection._connect_subscribers
+    assert dev.on_connection_lost not in buffer_connection._disconnect_subscribers
+
+
+def test_device_remove_closes_log_handlers_and_same_name_logger_can_be_recreated(buffer_connection):
+    import logging
+    from moler.config.loggers import active_loggers, close_device_logger, configure_device_logger
+    from moler.device.unixlocal import UnixLocal
+    dev = UnixLocal(io_connection=buffer_connection, name="REMOVE_LOGGER")
+    logger = dev.device_data_logger
+    handlers = list(logger.handlers)
+    file_handlers = [handler for handler in handlers if isinstance(handler, logging.FileHandler)]
+    assert file_handlers
+
+    dev.remove()
+
+    assert [] == logger.handlers
+    for handler in file_handlers:
+        assert handler.stream is None
+    assert logger.name not in active_loggers
+
+    recreated_logger = configure_device_logger(connection_name="REMOVE_LOGGER")
+    try:
+        assert recreated_logger is logger
+        assert any(isinstance(handler, logging.FileHandler) for handler in recreated_logger.handlers)
+    finally:
+        close_device_logger(recreated_logger)
+
+
+def test_device_remove_unlinks_neighbour_devices(buffer_connection):
+    from moler.device.unixlocal import UnixLocal
+    dev1 = UnixLocal(io_connection=buffer_connection, name="REMOVE_NEIGHBOUR_1")
+    dev2 = UnixLocal(io_connection=buffer_connection, name="REMOVE_NEIGHBOUR_2")
+    dev1.add_neighbour_device(neighbour_device=dev2, bidirectional=True)
+
+    dev1.remove()
+
+    assert [] == dev1.get_neighbour_devices(device_type=None)
+    assert [] == dev2.get_neighbour_devices(device_type=None)
+    dev2.remove()
+
+
+def test_device_remove_calls_removal_callbacks_only_once(buffer_connection):
+    import mock
+    from moler.device.unixlocal import UnixLocal
+    dev = UnixLocal(io_connection=buffer_connection, name="REMOVE_CALLBACKS")
+    callback = mock.Mock()
+    dev.register_device_removal_callback(callback)
+
+    dev.remove()
+    dev.remove()
+
+    assert 1 == callback.call_count
+
+
+def test_device_remove_drops_queued_states_and_waits_for_goto_state_thread(buffer_connection):
+    import threading
+    import time
+    from moler.device.unixlocal import UnixLocal
+    dev = UnixLocal(io_connection=buffer_connection, name="REMOVE_GOTO_THREAD")
+    dev._kept_state = "UNIX_LOCAL"
+    dev._queue_states.put({"dest_state": "UNIX_LOCAL"})
+    dev._queue_states.put({"dest_state": "UNIX_LOCAL_ROOT"})
+    goto_thread = threading.Thread(target=time.sleep, args=(0.5,), daemon=True)
+    goto_thread.start()
+    dev._thread_for_goto_state = goto_thread
+
+    dev.remove()
+
+    assert dev._queue_states.empty()
+    assert dev._kept_state is None
+    assert not goto_thread.is_alive()
+
+
+def test_device_remove_of_not_established_device_does_not_open_connection(buffer_connection):
+    import mock
+    from moler.device.unixlocal import UnixLocal
+    dev = UnixLocal(io_connection=buffer_connection, name="REMOVE_NOT_ESTABLISHED")
+    assert not dev.has_established_connection()
+
+    with mock.patch.object(dev, "establish_connection") as establish_connection:
+        dev.remove()
+
+    establish_connection.assert_not_called()
+    assert "NOT_CONNECTED" == dev.current_state
+
+
+def test_device_remove_shuts_down_moler_connection(buffer_connection):
+    import mock
+    from moler.device.unixlocal import UnixLocal
+    dev = UnixLocal(io_connection=buffer_connection, name="REMOVE_SHUTDOWN")
+    moler_connection = buffer_connection.moler_connection
+
+    with mock.patch.object(buffer_connection, "close"):
+        dev.remove()
+
+    assert not moler_connection.is_open()
+
+
+def test_device_remove_of_established_device_closes_and_cleans_up(configure_net_1_connection):
+    import mock
+    from moler.device.unixlocal import UnixLocal
+    dev = UnixLocal.from_named_connection(connection_name='net_1')
+    neighbour = UnixLocal.from_named_connection(connection_name='net_1')
+    dev.add_neighbour_device(neighbour_device=neighbour, bidirectional=True)
+    callback = mock.Mock()
+    dev.register_device_removal_callback(callback)
+    dev.establish_connection()
+    assert "UNIX_LOCAL" == dev.current_state
+    io_connection = dev.io_connection
+
+    dev.remove()
+    dev.remove()
+
+    assert "NOT_CONNECTED" == dev.current_state
+    assert not dev.has_established_connection()
+    assert not io_connection.moler_connection.is_open()
+    assert dev.on_connection_made not in io_connection._connect_subscribers
+    assert dev.on_connection_lost not in io_connection._disconnect_subscribers
+    assert [] == neighbour.get_neighbour_devices(device_type=None)
+    assert 1 == callback.call_count
+    assert [] == dev.device_data_logger.handlers
+
 # --------------------------- resources ---------------------------
 
 

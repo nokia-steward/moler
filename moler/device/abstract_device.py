@@ -224,5 +224,7 @@ class AbstractDevice:
 
         :return: None
         """
-        for callback in self._remove_callbacks:
+        callbacks = self._remove_callbacks
+        self._remove_callbacks = []
+        for callback in callbacks:
             callback()

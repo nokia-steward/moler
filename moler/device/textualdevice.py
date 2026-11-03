@@ -22,7 +22,7 @@ import threading
 import time
 import traceback
 
-from moler.config.loggers import change_logging_suffix, configure_device_logger
+from moler.config.loggers import change_logging_suffix, close_device_logger, configure_device_logger
 from moler.connection_factory import get_connection
 from moler.connection_observer import ConnectionObserver
 from moler.device.abstract_device import AbstractDevice
@@ -235,15 +235,60 @@ class TextualDevice(AbstractDevice):
         mg = pformat(traceback.format_list(traceback.extract_stack(limit=stack_limit))[::-1])
         self._log(level=logging.INFO, msg=f"Device '{self.name}' is about to remove. Requested by: {mg}\n(...)")
 
-        try:
-            self.goto_state(TextualDevice.not_connected, rerun=5)
-        except DeviceChangeStateFailure:
+        self._stop_goto_state_thread()
+        if self.has_established_connection():
+            try:
+                self.goto_state(TextualDevice.not_connected, rerun=5)
+            except DeviceChangeStateFailure:
+                self._close_connection(None, None, None)
+        else:
             self._close_connection(None, None, None)
+        self._set_state(TextualDevice.not_connected)
+        self.io_connection.moler_connection.shutdown()
+        self.io_connection.unsubscribe_on_connection_made(subscriber=self.on_connection_made)
+        self.io_connection.unsubscribe_on_connection_lost(subscriber=self.on_connection_lost)
+        self._remove_neighbour_devices()
 
         super(TextualDevice, self).remove()
         msg = f"Device '{self.name}' is closed."
         self._log(level=logging.INFO, msg=msg)
         self._close_logger()
+
+    def _stop_goto_state_thread(self, timeout=10):
+        """
+        Drops states queued for background goto_state and waits for the background thread to finish.
+
+        :param timeout: max time in seconds to wait for the thread.
+        :return: None
+        """
+        self._kept_state = None
+        while True:
+            try:
+                self._queue_states.get_nowait()
+            except queue.Empty:
+                break
+        thread = self._thread_for_goto_state
+        if thread is not None and thread is not threading.current_thread():
+            thread.join(timeout=timeout)
+            if thread.is_alive():
+                self._log(
+                    logging.WARNING,
+                    f"Thread '{thread.name}' to change state is still alive after {timeout} seconds.",
+                )
+        self._kept_state = None
+
+    def _remove_neighbour_devices(self):
+        """
+        Unlinks this device from all its neighbour devices (in both directions).
+
+        :return: None
+        """
+        neighbour_devices = self._neighbour_devices or []
+        self._neighbour_devices = None
+        for neighbour_device in neighbour_devices:
+            neighbours_of_neighbour = getattr(neighbour_device, "_neighbour_devices", None)
+            if neighbours_of_neighbour and self in neighbours_of_neighbour:
+                neighbours_of_neighbour.remove(self)
 
     def has_established_connection(self):
         return self._established
@@ -308,7 +353,7 @@ class TextualDevice(AbstractDevice):
         self.io_connection.moler_connection.set_data_logger(self.device_data_logger)
 
     def _close_logger(self):
-        self.device_data_logger.handlers = []
+        close_device_logger(self.device_data_logger)
 
     @abc.abstractmethod
     def _prepare_transitions(self):
