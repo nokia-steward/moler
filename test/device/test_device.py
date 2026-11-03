@@ -244,6 +244,40 @@ def test_device_remove_of_established_device_closes_and_cleans_up(configure_net_
     assert 1 == callback.call_count
     assert [] == dev.device_data_logger.handlers
 
+
+def test_device_remove_does_cleanup_even_if_closing_connection_fails(buffer_connection):
+    import mock
+    from moler.device.unixlocal import UnixLocal
+    dev = UnixLocal(io_connection=buffer_connection, name="REMOVE_CLOSE_FAILS")
+    callback = mock.Mock()
+    dev.register_device_removal_callback(callback)
+    logger = dev.device_data_logger
+
+    with mock.patch.object(dev, "_close_connection", side_effect=RuntimeError("close failed")):
+        with pytest.raises(RuntimeError, match="close failed"):
+            dev.remove()
+
+    assert 1 == callback.call_count
+    assert dev.on_connection_made not in buffer_connection._connect_subscribers
+    assert dev.on_connection_lost not in buffer_connection._disconnect_subscribers
+    assert [] == logger.handlers
+
+
+def test_device_remove_does_not_shutdown_moler_connection_shared_with_neighbour(buffer_connection):
+    import mock
+    from moler.device.unixlocal import UnixLocal
+    dev1 = UnixLocal(io_connection=buffer_connection, name="REMOVE_SHARED_1")
+    dev2 = UnixLocal(io_connection=buffer_connection, name="REMOVE_SHARED_2")
+    dev1.add_neighbour_device(neighbour_device=dev2, bidirectional=True)
+    moler_connection = buffer_connection.moler_connection
+
+    # io close() of some connections shuts moler connection down by itself - here only the device's own shutdown is checked
+    with mock.patch.object(buffer_connection, "close"), mock.patch.object(moler_connection, "shutdown") as shutdown:
+        dev1.remove()
+        shutdown.assert_not_called()
+        dev2.remove()
+        shutdown.assert_called_once_with()
+
 # --------------------------- resources ---------------------------
 
 

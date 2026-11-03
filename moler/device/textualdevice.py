@@ -228,6 +228,9 @@ class TextualDevice(AbstractDevice):
     def remove(self, stack_limit=6):
         """
         Closes device, if any command or event is attached to this device they will be finished.
+        Device owns its connection so the connection is closed and the moler connection is shut down, unless
+        the connection is shared with a neighbour device (then only closing is done). Cleanup (unsubscribing,
+        unlinking neighbours, removal callbacks, closing logger) is done even if closing the connection fails.
 
         :param stack_limit: how many stack frames to keep. If None then all stack frames are kept.
         :return: None
@@ -235,24 +238,43 @@ class TextualDevice(AbstractDevice):
         mg = pformat(traceback.format_list(traceback.extract_stack(limit=stack_limit))[::-1])
         self._log(level=logging.INFO, msg=f"Device '{self.name}' is about to remove. Requested by: {mg}\n(...)")
 
-        self._stop_goto_state_thread()
-        if self.has_established_connection():
-            try:
-                self.goto_state(TextualDevice.not_connected, rerun=5)
-            except DeviceChangeStateFailure:
+        try:
+            self._stop_goto_state_thread()
+            if self.has_established_connection():
+                try:
+                    self.goto_state(TextualDevice.not_connected, rerun=5)
+                except DeviceChangeStateFailure:
+                    self._close_connection(None, None, None)
+            else:
                 self._close_connection(None, None, None)
-        else:
-            self._close_connection(None, None, None)
-        self._set_state(TextualDevice.not_connected)
-        self.io_connection.moler_connection.shutdown()
-        self.io_connection.unsubscribe_on_connection_made(subscriber=self.on_connection_made)
-        self.io_connection.unsubscribe_on_connection_lost(subscriber=self.on_connection_lost)
-        self._remove_neighbour_devices()
+            self._set_state(TextualDevice.not_connected)
+            if not self._is_io_connection_used_by_neighbours():
+                self.io_connection.moler_connection.shutdown()
+        finally:
+            # Cleanup below must be done even if closing of the connection failed. Otherwise removal callbacks
+            # (for example forgetting the device by Device registry) would not be called and logs would stay open.
+            try:
+                self.io_connection.unsubscribe_on_connection_made(subscriber=self.on_connection_made)
+                self.io_connection.unsubscribe_on_connection_lost(subscriber=self.on_connection_lost)
+                self._remove_neighbour_devices()
+            finally:
+                try:
+                    super(TextualDevice, self).remove()
+                finally:
+                    self._log(level=logging.INFO, msg=f"Device '{self.name}' is closed.")
+                    self._close_logger()
 
-        super(TextualDevice, self).remove()
-        msg = f"Device '{self.name}' is closed."
-        self._log(level=logging.INFO, msg=msg)
-        self._close_logger()
+    def _is_io_connection_used_by_neighbours(self):
+        """
+        Checks if any neighbour device uses the same io_connection as this device. If so then moler connection must
+        not be shut down since it would finish observers of the neighbour device.
+
+        :return: True if io_connection is shared with a neighbour device, False otherwise.
+        """
+        for neighbour_device in self._neighbour_devices or []:
+            if getattr(neighbour_device, "io_connection", None) is self.io_connection:
+                return True
+        return False
 
     def _stop_goto_state_thread(self, timeout=10):
         """
