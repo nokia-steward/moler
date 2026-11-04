@@ -9,8 +9,11 @@ __copyright__ = "Copyright (C) 2019-2026, Nokia"
 __email__ = "marcin.usielski@nokia.com"
 
 import abc
+import logging
 
 import six
+
+_logger = logging.getLogger(__name__)
 
 
 @six.add_metaclass(abc.ABCMeta)
@@ -232,6 +235,7 @@ class AbstractDevice:
             try:
                 callback()
             except Exception as ex:  # pylint: disable=broad-except
+                _logger.warning("Device removal callback %r failed: %r", callback, ex, exc_info=True)
                 if first_exception is None:
                     first_exception = ex
         if first_exception is not None:

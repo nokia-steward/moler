@@ -257,8 +257,7 @@ class TextualDevice(AbstractDevice):
             # Cleanup below must be done even if closing of the connection failed. Otherwise removal callbacks
             # (for example forgetting the device by Device registry) would not be called and logs would stay open.
             try:
-                self.io_connection.unsubscribe_on_connection_made(subscriber=self.on_connection_made)
-                self.io_connection.unsubscribe_on_connection_lost(subscriber=self.on_connection_lost)
+                self._unsubscribe_from_io_connection(io_connection=self.io_connection)
                 self._remove_neighbour_devices()
             finally:
                 try:
@@ -452,7 +451,8 @@ class TextualDevice(AbstractDevice):
         self.io_connection.moler_connection.set_data_logger(self.device_data_logger)
 
     def _close_logger(self):
-        close_device_logger(self.device_data_logger)
+        if self.device_data_logger is not None:
+            close_device_logger(self.device_data_logger)
 
     @abc.abstractmethod
     def _prepare_transitions(self):
@@ -575,7 +575,8 @@ class TextualDevice(AbstractDevice):
 
             self.logger.log(level, msg, extra=extra_params)
 
-        self.device_data_logger.log(level, msg)
+        if self.device_data_logger is not None:
+            self.device_data_logger.log(level, msg)
 
     def _set_state(self, state):
         if self.current_state != state:
@@ -1211,6 +1212,27 @@ class TextualDevice(AbstractDevice):
             callback=self.on_connection_lost, when="connection_lost"
         )
 
+    def _unsubscribe_from_io_connection(self, io_connection):
+        """
+        Stops notifying the device about connection made and lost. Connections without unsubscribe methods (not
+        derived from IOConnection) are skipped.
+
+        :param io_connection: io_connection to unsubscribe from.
+        :return: None
+        """
+        for method_name, callback in (
+            ("unsubscribe_on_connection_made", self.on_connection_made),
+            ("unsubscribe_on_connection_lost", self.on_connection_lost),
+        ):
+            unsubscribe = getattr(io_connection, method_name, None)
+            if unsubscribe is None:
+                self._log(
+                    level=logging.DEBUG,
+                    msg=f"Connection '{io_connection.__class__.__name__}' has no method '{method_name}'. Skipped.",
+                )
+                continue
+            unsubscribe(subscriber=callback)
+
     def _detach_from_io_connection(self):
         """
         Releases the current io_connection. If it is shared with a neighbour device then it is handed over to the
@@ -1219,8 +1241,7 @@ class TextualDevice(AbstractDevice):
         :return: None
         """
         io_connection = self.io_connection
-        io_connection.unsubscribe_on_connection_made(subscriber=self.on_connection_made)
-        io_connection.unsubscribe_on_connection_lost(subscriber=self.on_connection_lost)
+        self._unsubscribe_from_io_connection(io_connection=io_connection)
         self._stop_prompts_observers()
         self._cancel_created_observers()
         sharing_neighbour = self._get_neighbour_sharing_io_connection()

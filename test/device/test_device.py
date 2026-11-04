@@ -367,6 +367,64 @@ def test_device_remove_calls_all_removal_callbacks_even_if_one_fails(buffer_conn
     assert [] == logger.handlers
 
 
+def test_device_remove_logs_all_failing_removal_callbacks_and_raises_first(buffer_connection):
+    import mock
+    import moler.device.abstract_device as abstract_device
+    from moler.device.unixlocal import UnixLocal
+    dev = UnixLocal(io_connection=buffer_connection, name="REMOVE_FAILING_CALLBACKS")
+    first_callback = mock.Mock(side_effect=RuntimeError("first failed"))
+    middle_callback = mock.Mock()
+    last_callback = mock.Mock(side_effect=ValueError("last failed"))
+    for callback in (first_callback, middle_callback, last_callback):
+        dev.register_device_removal_callback(callback)
+
+    with mock.patch.object(abstract_device._logger, "warning") as warning:
+        with pytest.raises(RuntimeError, match="first failed"):
+            dev.remove()
+
+    assert 1 == middle_callback.call_count
+    logged_exceptions = [call.args[2] for call in warning.call_args_list]
+    assert 2 == len(logged_exceptions)
+    assert isinstance(logged_exceptions[0], RuntimeError)
+    assert isinstance(logged_exceptions[1], ValueError)
+
+
+def test_device_remove_skips_unsubscribe_for_connection_without_it(buffer_connection):
+    from moler.device.unixlocal import UnixLocal
+    connection = _ConnectionWithoutUnsubscribe(io_connection=buffer_connection)
+    dev = UnixLocal(io_connection=connection, name="REMOVE_NO_UNSUBSCRIBE")
+
+    dev.remove()
+
+    assert "NOT_CONNECTED" == dev.current_state
+
+
+def test_device_exchange_io_connection_skips_unsubscribe_for_connection_without_it(buffer_connection):
+    from moler.device.unixlocal import UnixLocal
+    from moler.util.devices_SM import get_memory_device_connection
+    dev = UnixLocal(io_connection=_ConnectionWithoutUnsubscribe(io_connection=buffer_connection),
+                    name="EXCHANGE_NO_UNSUBSCRIBE")
+    new_connection = get_memory_device_connection()
+
+    dev.exchange_io_connection(io_connection=new_connection)
+    try:
+        assert dev.io_connection is new_connection
+    finally:
+        dev.remove()
+
+
+def test_device_remove_without_data_logger(buffer_connection):
+    from moler.config.loggers import close_device_logger
+    from moler.device.unixlocal import UnixLocal
+    dev = UnixLocal(io_connection=buffer_connection, name="REMOVE_NO_DATA_LOGGER")
+    data_logger = dev.device_data_logger
+    dev.device_data_logger = None
+    try:
+        dev.remove()
+    finally:
+        close_device_logger(data_logger)
+
+
 def test_removed_device_is_not_returned_as_neighbour_of_one_directional_link(buffer_connection):
     from moler.device.unixlocal import UnixLocal
     dev1 = UnixLocal(io_connection=buffer_connection, name="REMOVE_ONE_WAY_1")
@@ -534,6 +592,21 @@ def test_devices_sm_get_device_for_existing_device_moves_it_to_new_connection():
 
 
 # --------------------------- resources ---------------------------
+
+
+class _ConnectionWithoutUnsubscribe(object):
+    """Connection not derived from IOConnection, without unsubscribe methods."""
+
+    def __init__(self, io_connection):
+        object.__setattr__(self, "_io_connection", io_connection)
+
+    def __getattr__(self, name):
+        if name.startswith("unsubscribe_"):
+            raise AttributeError(name)
+        return getattr(self._io_connection, name)
+
+    def __setattr__(self, name, value):
+        setattr(self._io_connection, name, value)
 
 
 @pytest.fixture
