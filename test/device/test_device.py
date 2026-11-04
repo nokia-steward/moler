@@ -399,6 +399,140 @@ def test_device_logger_shared_by_devices_of_the_same_name_is_closed_by_the_last_
         close_device_logger(logger)
 
 
+def test_device_exchange_io_connection_releases_old_connection():
+    from moler.device.unixlocal import UnixLocal
+    from moler.util.devices_SM import get_memory_device_connection
+    old_connection = get_memory_device_connection()
+    new_connection = get_memory_device_connection()
+    dev = UnixLocal(io_connection=old_connection, name="EXCHANGE_RELEASES_OLD")
+    old_moler_connection = old_connection.moler_connection
+
+    dev.exchange_io_connection(io_connection=new_connection)
+    try:
+        assert dev.io_connection is new_connection
+        assert dev.on_connection_made not in old_connection._connect_subscribers
+        assert dev.on_connection_lost not in old_connection._disconnect_subscribers
+        assert not old_moler_connection.is_open()
+    finally:
+        dev.remove()
+
+
+def test_device_exchange_io_connection_attaches_new_connection():
+    from moler.device.unixlocal import UnixLocal
+    from moler.util.devices_SM import get_memory_device_connection
+    old_connection = get_memory_device_connection()
+    new_connection = get_memory_device_connection()
+    dev = UnixLocal(io_connection=old_connection, name="EXCHANGE_ATTACHES_NEW")
+
+    dev.exchange_io_connection(io_connection=new_connection)
+    try:
+        assert "UNIX_LOCAL" == dev.current_state
+        assert dev._prompts_event is not None
+        assert new_connection.name == "EXCHANGE_ATTACHES_NEW"
+        assert new_connection.moler_connection.name == "EXCHANGE_ATTACHES_NEW"
+        assert new_connection.moler_connection.data_logger is dev.device_data_logger
+        assert dev.on_connection_made in new_connection._connect_subscribers
+        assert dev.on_connection_lost in new_connection._disconnect_subscribers
+
+        new_connection.close()
+
+        assert "NOT_CONNECTED" == dev.current_state
+    finally:
+        dev.remove()
+
+
+def test_device_exchange_io_connection_cancels_observers_created_on_old_connection():
+    from moler.device.unixlocal import UnixLocal
+    from moler.util.devices_SM import get_memory_device_connection
+    old_connection = get_memory_device_connection()
+    dev = UnixLocal(io_connection=old_connection, name="EXCHANGE_CANCELS_OBSERVERS")
+    cmd = dev.get_cmd(cmd_name="ls", cmd_params={"prompt": r"^moler_bash#"}, check_state=False,
+                      for_state="UNIX_LOCAL")
+
+    dev.exchange_io_connection(io_connection=get_memory_device_connection())
+    try:
+        assert cmd.cancelled()
+    finally:
+        dev.remove()
+
+
+def test_device_exchange_io_connection_does_not_close_connection_shared_with_neighbour(buffer_connection):
+    import mock
+    from moler.device.unixlocal import UnixLocal
+    from moler.util.devices_SM import get_memory_device_connection
+    dev1 = UnixLocal(io_connection=buffer_connection, name="EXCHANGE_SHARED_1")
+    dev2 = UnixLocal(io_connection=buffer_connection, name="EXCHANGE_SHARED_2")
+    dev1.add_neighbour_device(neighbour_device=dev2, bidirectional=True)
+    moler_connection = buffer_connection.moler_connection
+    cmd_params = {"prompt": r"^moler_bash#"}
+    cmd2 = dev2.get_cmd(cmd_name="ls", cmd_params=cmd_params, check_state=False, for_state="UNIX_LOCAL")
+
+    with mock.patch.object(buffer_connection, "close") as close, \
+            mock.patch.object(moler_connection, "shutdown") as shutdown:
+        dev2.exchange_io_connection(io_connection=get_memory_device_connection())
+        try:
+            close.assert_not_called()
+            shutdown.assert_not_called()
+            assert dev2.on_connection_made not in buffer_connection._connect_subscribers
+            assert dev1.on_connection_made in buffer_connection._connect_subscribers
+            assert cmd2.cancelled()
+            assert moler_connection.data_logger is dev1.device_data_logger
+            assert buffer_connection.name == "EXCHANGE_SHARED_1"
+            assert moler_connection.name == "EXCHANGE_SHARED_1"
+        finally:
+            dev2.remove()
+            dev1.remove()
+
+
+def test_device_exchange_io_connection_to_the_same_connection_does_nothing():
+    import mock
+    from moler.device.unixlocal import UnixLocal
+    from moler.util.devices_SM import get_memory_device_connection
+    connection = get_memory_device_connection()
+    dev = UnixLocal(io_connection=connection, name="EXCHANGE_SAME")
+
+    with mock.patch.object(connection, "close") as close:
+        dev.exchange_io_connection(io_connection=connection)
+    try:
+        close.assert_not_called()
+        assert dev.io_connection is connection
+        assert connection.moler_connection.is_open()
+        assert dev.on_connection_made in connection._connect_subscribers
+    finally:
+        dev.remove()
+
+
+def test_devices_sm_get_device_for_existing_device_moves_it_to_new_connection():
+    from moler.device import DeviceFactory
+    from moler.util.devices_SM import get_device, get_memory_device_connection
+    device_output = {
+        "UNIX_LOCAL": {
+            'su': 'local_root_prompt'
+        },
+        "UNIX_LOCAL_ROOT": {
+            'exit': 'moler_bash#'
+        },
+    }
+    old_connection = get_memory_device_connection()
+    new_connection = get_memory_device_connection()
+    dev = get_device(name="UNIX_LOCAL", connection=old_connection, device_output=device_output,
+                     test_file_path=__file__)
+    try:
+        same_dev = get_device(name="UNIX_LOCAL", connection=new_connection, device_output=device_output,
+                              test_file_path=__file__)
+
+        assert same_dev is dev
+        assert dev.io_connection is new_connection
+        assert dev.on_connection_lost not in old_connection._disconnect_subscribers
+        assert not old_connection.moler_connection.is_open()
+        dev.goto_state("UNIX_LOCAL_ROOT")
+        assert "UNIX_LOCAL_ROOT" == dev.current_state
+        dev.goto_state("UNIX_LOCAL")
+        assert "UNIX_LOCAL" == dev.current_state
+    finally:
+        DeviceFactory.remove_device(device=dev)
+
+
 # --------------------------- resources ---------------------------
 
 

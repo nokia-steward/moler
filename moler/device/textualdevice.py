@@ -121,21 +121,12 @@ class TextualDevice(AbstractDevice):
                 io_type=io_type, variant=variant, **io_constructor_kwargs
             )
 
-        self.io_connection.name = self.name
-        self.io_connection.moler_connection.name = self.name
         self.logger = logging.getLogger(f"moler.connection.{self.name}")
         self.configure_logger(name=self.name, propagate=False)
+        self._attach_to_io_connection()
 
         self._stored_transitions = {}
         self._prepare_sm_data(sm_params=sm_params)
-
-        # TODO: Need test to ensure above sentence for all connection
-        self.io_connection.notify(
-            callback=self.on_connection_made, when="connection_made"
-        )
-        self.io_connection.notify(
-            callback=self.on_connection_lost, when="connection_lost"
-        )
 
         self._cmdnames_available_in_state = {}
         self._eventnames_available_in_state = {}
@@ -325,7 +316,7 @@ class TextualDevice(AbstractDevice):
         for observer in list(self._created_observers):
             try:
                 if observer.cancel():
-                    self._log(level=logging.INFO, msg=f"Cancelled '{observer}' while removing device '{self.name}'.")
+                    self._log(level=logging.INFO, msg=f"Cancelled '{observer}' created by device '{self.name}'.")
             except Exception as ex:  # pylint: disable=broad-except
                 self._log(level=logging.WARNING, msg=f"Cannot cancel '{observer}': {ex!r}.")
         self._created_observers.clear()
@@ -1184,12 +1175,63 @@ class TextualDevice(AbstractDevice):
             self.states.append(state)
 
     def exchange_io_connection(self, io_connection):
-        self._close_connection(None, None, None)
+        """
+        Replaces io_connection of the device. The old connection is released: device stops observing it, cancels
+        commands and events created on it and closes it (unless it is still used by a neighbour device).
+
+        :param io_connection: new io_connection for the device.
+        :return: None
+        """
+        if io_connection is self.io_connection:
+            return
+        self._detach_from_io_connection()
         self.io_connection = io_connection
         self.io_connection.set_device(self)
         self.io_connection.open()
+        # Attached after open, so on_connection_made does not interfere with the state set below.
+        self._attach_to_io_connection()
         self._set_state("UNIX_LOCAL")
         self._run_prompts_observers()
+
+    def _attach_to_io_connection(self):
+        """
+        Makes the current io_connection log data to the device logger, use the device name and notify the device
+        about connection made and lost.
+
+        :return: None
+        """
+        self.io_connection.name = self.name
+        self.io_connection.moler_connection.name = self.name
+        if self.device_data_logger is not None:
+            self.io_connection.moler_connection.set_data_logger(self.device_data_logger)
+        self.io_connection.notify(
+            callback=self.on_connection_made, when="connection_made"
+        )
+        self.io_connection.notify(
+            callback=self.on_connection_lost, when="connection_lost"
+        )
+
+    def _detach_from_io_connection(self):
+        """
+        Releases the current io_connection. If it is shared with a neighbour device then it is handed over to the
+        neighbour, otherwise it is closed and its moler connection is shut down.
+
+        :return: None
+        """
+        io_connection = self.io_connection
+        io_connection.unsubscribe_on_connection_made(subscriber=self.on_connection_made)
+        io_connection.unsubscribe_on_connection_lost(subscriber=self.on_connection_lost)
+        self._stop_prompts_observers()
+        self._cancel_created_observers()
+        sharing_neighbour = self._get_neighbour_sharing_io_connection()
+        if sharing_neighbour is not None:
+            self._hand_over_shared_connection(neighbour_device=sharing_neighbour)
+            self._established = False
+        else:
+            try:
+                self._close_connection(None, None, None)
+            finally:
+                io_connection.moler_connection.shutdown()
 
     # pylint: disable-next=unused-argument
     def _open_connection(self, source_state, dest_state, timeout):
