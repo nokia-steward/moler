@@ -572,6 +572,114 @@ def test_device_exchange_io_connection_releases_old_connection():
         dev.remove()
 
 
+def test_device_exchange_io_connection_stops_goto_state_thread_before_closing_old_connection():
+    import mock
+    import threading
+    from moler.device.unixlocal import UnixLocal
+    from moler.util.devices_SM import get_memory_device_connection
+    old_connection = get_memory_device_connection()
+    new_connection = get_memory_device_connection()
+    dev = UnixLocal(io_connection=old_connection, name="EXCHANGE_GOTO_BUSY")
+    dev._goto_state_thread_grace_timeout = 0.2
+    dev._goto_state_thread_join_timeout = 3
+    command_cancelled = threading.Event()
+    running_command = mock.Mock(name="running_command")
+    running_command.cancel.side_effect = lambda: command_cancelled.set() or True
+    dev._created_observers.add(running_command)
+    goto_thread = threading.Thread(target=command_cancelled.wait, args=(10,), daemon=True)
+    goto_thread.start()
+    dev._thread_for_goto_state = goto_thread
+    dev._kept_state = "UNIX_LOCAL_ROOT"
+    dev._queue_states.put({"dest_state": "UNIX_LOCAL_ROOT"})
+    thread_alive_when_old_connection_closed = []
+    original_close = old_connection.close
+
+    def close():
+        thread_alive_when_old_connection_closed.append(goto_thread.is_alive())
+        return original_close()
+
+    with mock.patch.object(old_connection, "close", side_effect=close):
+        dev.exchange_io_connection(io_connection=new_connection)
+    try:
+        assert [False] == thread_alive_when_old_connection_closed
+        running_command.cancel.assert_called_once_with()
+        assert dev._queue_states.empty()
+        assert dev._kept_state is None
+        assert dev.io_connection is new_connection
+        assert "UNIX_LOCAL" == dev.current_state
+    finally:
+        dev.remove()
+
+
+def test_background_goto_state_stops_between_hops_after_exchange_of_io_connection(buffer_connection):
+    import mock
+    import threading
+    from moler.device.unixlocal import UnixLocal
+    dev = UnixLocal(io_connection=buffer_connection, name="EXCHANGE_GOTO_HOPS")
+    hops = []
+
+    def trigger_change_state(**kwargs):
+        hops.append(kwargs["next_state"])
+        dev._goto_state_generation += 1  # io_connection is exchanged while the first hop is executed.
+
+    state_options = {
+        "dest_state": "UNIX_LOCAL_ROOT", "keep_state": True, "timeout": 5, "rerun": 0,
+        "send_enter_after_changed_state": False, "log_stacktrace_on_fail": False,
+        "queue_if_goto_state_in_another_thread": False, "ignore_exceptions": True,
+    }
+    dev._queue_states.put(state_options)
+    dev._queue_states.put(dict(state_options, dest_state="UNIX_LOCAL"))  # Belongs to a newer thread.
+    thread = threading.Thread(target=dev._goto_state_thread, daemon=True)
+    dev._thread_for_goto_state = thread
+    with mock.patch.object(dev, "_get_next_state", return_value="UNIX_LOCAL"), \
+            mock.patch.object(dev, "_trigger_change_state", side_effect=trigger_change_state):
+        thread.start()
+        thread.join(timeout=3)
+
+    try:
+        assert not thread.is_alive()
+        assert ["UNIX_LOCAL"] == hops
+        assert dev._kept_state is None
+        assert dev._thread_for_goto_state is None
+        assert 1 == dev._queue_states.qsize()  # Device is not removed so states of newer thread are kept.
+    finally:
+        dev._drop_queued_states()
+        dev.remove()
+
+
+def test_stop_goto_state_thread_forgets_thread_that_cannot_be_stopped(buffer_connection):
+    import threading
+    import time
+    from moler.device.unixlocal import UnixLocal
+    dev = UnixLocal(io_connection=buffer_connection, name="GOTO_THREAD_NOT_STOPPED")
+    goto_thread = threading.Thread(target=time.sleep, args=(1.0,), daemon=True)
+    goto_thread.start()
+    dev._thread_for_goto_state = goto_thread
+    try:
+        dev._stop_goto_state_thread(timeout=0.05, grace_timeout=0.05)
+
+        assert goto_thread.is_alive()
+        assert dev._thread_for_goto_state is None  # New states are not queued for the thread that is stuck.
+    finally:
+        goto_thread.join(timeout=3)
+        dev.remove()
+
+
+def test_goto_state_thread_does_not_forget_newer_thread(buffer_connection):
+    import threading
+    from moler.device.unixlocal import UnixLocal
+    dev = UnixLocal(io_connection=buffer_connection, name="GOTO_THREAD_NEWER")
+    newer_thread = threading.Thread(target=lambda: None)
+    dev._thread_for_goto_state = newer_thread
+    try:
+        dev._forget_goto_state_thread()  # Called by a thread that is not the registered one.
+
+        assert dev._thread_for_goto_state is newer_thread
+    finally:
+        dev._thread_for_goto_state = None
+        dev.remove()
+
+
 def test_device_exchange_io_connection_attaches_new_connection():
     from moler.device.unixlocal import UnixLocal
     from moler.util.devices_SM import get_memory_device_connection

@@ -139,6 +139,8 @@ class TextualDevice(AbstractDevice):
         # Max time [s] for remove() to wait for goto state thread (after the grace time).
         self._goto_state_thread_join_timeout = 3
         self._goto_thread_local = threading.local()  # Marks the goto state thread, see _background_goto_aborted.
+        # Incremented when io_connection is exchanged. Goto state thread started for an older generation stops.
+        self._goto_state_generation = 0
         msg = f"Created device '{self.name}' as instance of class '{self.__class__.__module__}.{self.__class__.__name__}'."
         self._log(level=logging.DEBUG, msg=msg)
         self._public_name = None
@@ -392,6 +394,10 @@ class TextualDevice(AbstractDevice):
                     logging.WARNING,
                     f"Thread '{thread.name}' to change state is still alive after {grace_timeout + timeout} seconds.",
                 )
+                # Do not queue new states for the thread that is not able to finish. A new thread will wait for the
+                # old one (they share the lock) but it will not lose the work.
+                if self._thread_for_goto_state is thread:
+                    self._thread_for_goto_state = None
         self._kept_state = None
 
     def _drop_queued_states(self):
@@ -408,12 +414,15 @@ class TextualDevice(AbstractDevice):
 
     def _background_goto_aborted(self):
         """
-        Tells if the current thread is the background goto_state thread of the removed device. Only the background
-        thread is aborted, remove() itself leaves states by goto_state from its own thread.
+        Tells if the current thread is the background goto_state thread that should stop: the device is removed or
+        io_connection was exchanged after the thread was started. Only the background thread is aborted, remove()
+        itself leaves states by goto_state from its own thread.
 
         :return: True if the background goto_state thread should stop, otherwise False.
         """
-        return self._removed and getattr(self._goto_thread_local, "is_background", False) is True
+        if getattr(self._goto_thread_local, "is_background", False) is not True:
+            return False
+        return self._removed or self._goto_thread_local.generation != self._goto_state_generation
 
     def _remove_neighbour_devices(self):
         """
@@ -730,18 +739,30 @@ class TextualDevice(AbstractDevice):
 
     def _goto_state_thread(self):
         self._goto_thread_local.is_background = True
+        self._goto_thread_local.generation = self._goto_state_generation
         while True:
             with self._goto_state_thread_manipulation_lock:
                 if self._background_goto_aborted():
-                    self._drop_queued_states()
-                    self._thread_for_goto_state = None
+                    if self._removed:
+                        self._drop_queued_states()
+                    # Otherwise (exchanged io_connection) queued states belong to a newer thread, keep them.
+                    self._forget_goto_state_thread()
                     break
                 try:
                     goto_data = self._queue_states.get(True, 0.01)
                 except queue.Empty:
-                    self._thread_for_goto_state = None
+                    self._forget_goto_state_thread()
                     break
                 self._goto_state_execute(**goto_data)
+
+    def _forget_goto_state_thread(self):
+        """
+        Clears reference to the current thread. Reference to another (newer) goto state thread is left untouched.
+
+        :return: None
+        """
+        if self._thread_for_goto_state is threading.current_thread():
+            self._thread_for_goto_state = None
 
     def _goto_state_execute(
         self,
@@ -1288,10 +1309,19 @@ class TextualDevice(AbstractDevice):
         """
         Releases the current io_connection. If it is shared with a neighbour device then it is handed over to the
         neighbour, otherwise it is closed and its moler connection is shut down.
+        Background goto state thread that works on the connection is stopped before the connection is released. Its
+        pending states and kept state are dropped since they were meant for the old connection.
 
         :return: None
         """
         io_connection = self.io_connection
+        # Goto state thread started before this point stops between its steps (the device is not removed so the
+        # generation is used instead of _removed).
+        self._goto_state_generation += 1
+        self._stop_goto_state_thread(
+            timeout=self._goto_state_thread_join_timeout,
+            grace_timeout=self._goto_state_thread_grace_timeout,
+        )
         self._unsubscribe_from_io_connection(io_connection=io_connection)
         self._stop_prompts_observers()
         self._cancel_created_observers()
