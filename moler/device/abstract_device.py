@@ -5,7 +5,7 @@ Moler's device has 2 main responsibilities:
 - be the state machine that controls which commands may run in given state
 """
 __author__ = "Marcin Usielski"
-__copyright__ = "Copyright (C) 2019-2024, Nokia"
+__copyright__ = "Copyright (C) 2019-2026, Nokia"
 __email__ = "marcin.usielski@nokia.com"
 
 import abc
