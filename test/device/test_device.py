@@ -195,6 +195,103 @@ def test_device_remove_drops_queued_states_and_waits_for_goto_state_thread(buffe
     assert not goto_thread.is_alive()
 
 
+def test_background_goto_state_stops_between_hops_after_remove(buffer_connection):
+    import mock
+    import threading
+    from moler.device.unixlocal import UnixLocal
+    dev = UnixLocal(io_connection=buffer_connection, name="REMOVE_GOTO_HOPS")
+    hops = []
+
+    def trigger_change_state(**kwargs):
+        hops.append(kwargs["next_state"])
+        dev._removed = True  # Device is removed while the first hop is executed.
+
+    dev._queue_states.put({
+        "dest_state": "UNIX_LOCAL_ROOT", "keep_state": True, "timeout": 5, "rerun": 0,
+        "send_enter_after_changed_state": False, "log_stacktrace_on_fail": False,
+        "queue_if_goto_state_in_another_thread": False, "ignore_exceptions": True,
+    })
+    thread = threading.Thread(target=dev._goto_state_thread, daemon=True)
+    dev._thread_for_goto_state = thread
+    with mock.patch.object(dev, "_get_next_state", return_value="UNIX_LOCAL"), \
+            mock.patch.object(dev, "_trigger_change_state", side_effect=trigger_change_state):
+        thread.start()
+        thread.join(timeout=3)
+
+    try:
+        assert not thread.is_alive()
+        assert ["UNIX_LOCAL"] == hops
+        assert dev._kept_state is None
+        assert dev._thread_for_goto_state is None
+    finally:
+        dev._removed = False  # Let remove() really clean up.
+        dev.remove()
+
+
+def test_device_remove_cancels_observers_to_stop_busy_goto_state_thread(buffer_connection):
+    import mock
+    import threading
+    import time
+    from moler.device.unixlocal import UnixLocal
+    dev = UnixLocal(io_connection=buffer_connection, name="REMOVE_GOTO_BUSY")
+    dev._goto_state_thread_grace_timeout = 0.2
+    dev._goto_state_thread_join_timeout = 3
+    command_cancelled = threading.Event()
+    prompts_event = mock.Mock(name="prompts_event")
+    dev._prompts_event = prompts_event
+    dev._created_observers.add(prompts_event)
+    prompts_cancelled_before_command = []
+
+    def cancel_command():
+        prompts_cancelled_before_command.append(prompts_event.cancel.call_count)
+        command_cancelled.set()
+        return True
+
+    running_command = mock.Mock(name="running_command")
+    running_command.cancel.side_effect = cancel_command
+    dev._created_observers.add(running_command)
+    goto_thread = threading.Thread(target=command_cancelled.wait, args=(10,), daemon=True)
+    goto_thread.start()
+    dev._thread_for_goto_state = goto_thread
+
+    start_time = time.monotonic()
+    dev.remove()
+    elapsed = time.monotonic() - start_time
+
+    assert not goto_thread.is_alive()
+    assert elapsed < 3
+    running_command.cancel.assert_called_once_with()
+    assert [0] == prompts_cancelled_before_command  # Prompts observer is kept for leaving states.
+
+
+def test_device_remove_gives_up_waiting_for_goto_state_thread_that_cannot_be_stopped(buffer_connection):
+    import logging
+    import mock
+    import threading
+    import time
+    from moler.device.unixlocal import UnixLocal
+    dev = UnixLocal(io_connection=buffer_connection, name="REMOVE_GOTO_HUNG")
+    dev._goto_state_thread_grace_timeout = 0.1
+    dev._goto_state_thread_join_timeout = 0.2
+    goto_thread = threading.Thread(target=time.sleep, args=(1.5,), daemon=True)
+    goto_thread.start()
+    dev._thread_for_goto_state = goto_thread
+
+    try:
+        with mock.patch.object(dev, "_log", wraps=dev._log) as log:
+            start_time = time.monotonic()
+            dev.remove()
+            elapsed = time.monotonic() - start_time
+
+        assert goto_thread.is_alive()
+        assert elapsed < 1.2
+        warnings = [call.args[1] for call in log.call_args_list
+                    if len(call.args) > 1 and call.args[0] == logging.WARNING]
+        assert any("still alive" in warning for warning in warnings)
+    finally:
+        goto_thread.join(timeout=3)
+
+
 def test_device_remove_of_not_established_device_does_not_open_connection(buffer_connection):
     import mock
     from moler.device.unixlocal import UnixLocal

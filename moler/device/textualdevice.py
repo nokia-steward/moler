@@ -133,7 +133,12 @@ class TextualDevice(AbstractDevice):
         self._default_prompt = re.compile(r"^[^<]*[\$|%|#|>|~]\s*$")
         self._neighbour_devices = None
         self._established = False
-        self._goto_state_thread_join_timeout = 10  # Max time [s] for remove() to wait for goto state thread.
+        # Time [s] for remove() to wait for goto state thread to finish by itself. After that in-flight observers are
+        # cancelled to make the thread fail fast.
+        self._goto_state_thread_grace_timeout = 1
+        # Max time [s] for remove() to wait for goto state thread (after the grace time).
+        self._goto_state_thread_join_timeout = 3
+        self._goto_thread_local = threading.local()  # Marks the goto state thread, see _background_goto_aborted.
         msg = f"Created device '{self.name}' as instance of class '{self.__class__.__module__}.{self.__class__.__name__}'."
         self._log(level=logging.DEBUG, msg=msg)
         self._public_name = None
@@ -240,7 +245,10 @@ class TextualDevice(AbstractDevice):
         self._log(level=logging.INFO, msg=f"Device '{self.name}' is about to remove. Requested by: {mg}\n(...)")
 
         try:
-            self._stop_goto_state_thread(timeout=self._goto_state_thread_join_timeout)
+            self._stop_goto_state_thread(
+                timeout=self._goto_state_thread_join_timeout,
+                grace_timeout=self._goto_state_thread_grace_timeout,
+            )
             sharing_neighbour = self._get_neighbour_sharing_io_connection()
             if sharing_neighbour is not None:
                 self._release_shared_connection(neighbour_device=sharing_neighbour)
@@ -306,19 +314,22 @@ class TextualDevice(AbstractDevice):
         self._set_state(TextualDevice.not_connected)
         self._hand_over_shared_connection(neighbour_device=neighbour_device)
 
-    def _cancel_created_observers(self):
+    def _cancel_created_observers(self, skip=None):
         """
         Cancels not finished commands and events created by this device.
 
+        :param skip: observer that must not be cancelled (kept as created by the device) or None.
         :return: None
         """
         for observer in list(self._created_observers):
+            if skip is not None and observer is skip:
+                continue
             try:
                 if observer.cancel():
                     self._log(level=logging.INFO, msg=f"Cancelled '{observer}' created by device '{self.name}'.")
             except Exception as ex:  # pylint: disable=broad-except
                 self._log(level=logging.WARNING, msg=f"Cannot cancel '{observer}': {ex!r}.")
-        self._created_observers.clear()
+            self._created_observers.discard(observer)
 
     def _hand_over_shared_connection(self, neighbour_device):
         """
@@ -351,28 +362,58 @@ class TextualDevice(AbstractDevice):
                 return neighbour_device
         return None
 
-    def _stop_goto_state_thread(self, timeout=10):
+    def _stop_goto_state_thread(self, timeout=3, grace_timeout=1):
         """
         Drops states queued for background goto_state and waits for the background thread to finish.
+        The thread checks if the device is removed between its steps, so it usually finishes by itself within
+        grace_timeout. If it is still busy (for example waits for a command) then commands and events created by the
+        device are cancelled (except the prompts observer) to make the thread fail fast.
 
-        :param timeout: max time in seconds to wait for the thread.
+        :param timeout: max time in seconds to wait for the thread after the grace time.
+        :param grace_timeout: time in seconds to wait for the thread before cancelling observers.
         :return: None
         """
         self._kept_state = None
+        self._drop_queued_states()
+        thread = self._thread_for_goto_state
+        if thread is not None and thread is not threading.current_thread():
+            thread.join(timeout=grace_timeout)
+            if thread.is_alive():
+                self._log(
+                    logging.DEBUG,
+                    f"Thread '{thread.name}' to change state is still busy after {grace_timeout} seconds. "
+                    f"Cancelling observers.",
+                )
+                self._cancel_created_observers(skip=self._prompts_event)
+                self._drop_queued_states()
+                thread.join(timeout=timeout)
+            if thread.is_alive():
+                self._log(
+                    logging.WARNING,
+                    f"Thread '{thread.name}' to change state is still alive after {grace_timeout + timeout} seconds.",
+                )
+        self._kept_state = None
+
+    def _drop_queued_states(self):
+        """
+        Removes all states queued for background goto_state.
+
+        :return: None
+        """
         while True:
             try:
                 self._queue_states.get_nowait()
             except queue.Empty:
                 break
-        thread = self._thread_for_goto_state
-        if thread is not None and thread is not threading.current_thread():
-            thread.join(timeout=timeout)
-            if thread.is_alive():
-                self._log(
-                    logging.WARNING,
-                    f"Thread '{thread.name}' to change state is still alive after {timeout} seconds.",
-                )
-        self._kept_state = None
+
+    def _background_goto_aborted(self):
+        """
+        Tells if the current thread is the background goto_state thread of the removed device. Only the background
+        thread is aborted, remove() itself leaves states by goto_state from its own thread.
+
+        :return: True if the background goto_state thread should stop, otherwise False.
+        """
+        return self._removed and getattr(self._goto_thread_local, "is_background", False) is True
 
     def _remove_neighbour_devices(self):
         """
@@ -688,8 +729,13 @@ class TextualDevice(AbstractDevice):
                 self._thread_for_goto_state = thread
 
     def _goto_state_thread(self):
+        self._goto_thread_local.is_background = True
         while True:
             with self._goto_state_thread_manipulation_lock:
+                if self._background_goto_aborted():
+                    self._drop_queued_states()
+                    self._thread_for_goto_state = None
+                    break
                 try:
                     goto_data = self._queue_states.get(True, 0.01)
                 except queue.Empty:
@@ -759,6 +805,9 @@ class TextualDevice(AbstractDevice):
         next_stage_timeout = final_timeout
 
         while (not is_dest_state) and (not is_timeout):
+            if self._background_goto_aborted():
+                self._log(logging.DEBUG, f"Device '{self.name}' is removed. Stopped going to state '{dest_state}'.")
+                return
             next_state = self._get_next_state(dest_state)
             if self.current_state != dest_state:
                 self._trigger_change_state(
@@ -776,6 +825,8 @@ class TextualDevice(AbstractDevice):
                 next_stage_timeout = final_timeout - (time.monotonic() - start_time)
                 if next_stage_timeout <= 0:
                     is_timeout = True
+        if self._background_goto_aborted():
+            return
         if self._sleep_after_state_change is not None and self._sleep_after_state_change > 0:
             time.sleep(self._sleep_after_state_change)
         if keep_state:
@@ -854,7 +905,7 @@ class TextualDevice(AbstractDevice):
                     ex_traceback = traceback.format_exc()
                     msg = f"Method to change state failed but device '{self.name}' is in proper state '{self.current_state}'. Exception: {ex_traceback}"
                     self._log(logging.WARNING, msg=msg)
-                elif retrying == rerun:
+                elif retrying == rerun or self._background_goto_aborted():  # No retries for removed device.
                     ex_traceback = traceback.format_exc()
                     exc = DeviceChangeStateFailure(
                         device=self.__class__.__name__,
