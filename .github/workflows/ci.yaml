@@ -56,7 +56,6 @@ jobs:
         timeout-minutes: 30
         run: |
           python -m pytest -vvvsss test/
-          # python -m pytest -c py3pytest.ini -vvvsss test/
       - name: Test with pytest and coverage
         if: ${{ (matrix.python-version == env.PYTHON_COVERAGE) && (matrix.os == 'ubuntu-latest') }}
         timeout-minutes: 49
