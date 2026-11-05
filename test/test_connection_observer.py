@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 __author__ = 'Grzegorz Latuszek, Marcin Usielski'
-__copyright__ = 'Copyright (C) 2018-2025, Nokia'
+__copyright__ = 'Copyright (C) 2018-2026, Nokia'
 __email__ = 'grzegorz.latuszek@nokia.com, marcin.usielski@nokia.com'
 
 import importlib
@@ -244,7 +244,7 @@ def test_cancel_returns_false_if_connection_observer_is_cancelled(do_nothing_con
     # its user cancels it
     connection_observer.cancel()
     # after that user cancels it again
-    assert connection_observer.cancel() == False
+    assert connection_observer.cancel() is False
 
 
 def test_cancel_returns_false_if_connection_observer_is_done(do_nothing_connection_observer__for_major_base_class):
@@ -254,7 +254,7 @@ def test_cancel_returns_false_if_connection_observer_is_done(do_nothing_connecti
     # and it internally sets the result
     connection_observer.set_result(14361)  # connection_observer internally sets the result
     # after that its user cancels it
-    assert connection_observer.cancel() == False
+    assert connection_observer.cancel() is False
 
 
 def test_cancel_returns_true_if_connection_observer_is_not_cancelled_nor_done(
@@ -263,7 +263,7 @@ def test_cancel_returns_true_if_connection_observer_is_not_cancelled_nor_done(
     # We start feeding connection-observer with data coming from connection
     # but before it finds what it is waiting for
     # its user cancels it
-    assert connection_observer.cancel() == True
+    assert connection_observer.cancel() is True
 
 
 def test_can_retrieve_connection_observer_result_after_setting_result(

@@ -3,7 +3,7 @@
 Testing possibilities to configure devices
 """
 __author__ = 'Michal Ernst, Marcin Usielski'
-__copyright__ = 'Copyright (C) 2018-2025, Nokia'
+__copyright__ = 'Copyright (C) 2018-2026, Nokia'
 __email__ = 'michal.ernst@nokia.com, marcin.usielski@nokia.com'
 
 import os
@@ -210,6 +210,49 @@ def test_load_devices_after_deletion(moler_config, device_factory):
     device_2 = device_factory.get_device(name=device_org_name)
     assert device_2 != device_org
     assert len(devices_loaded1) == len(devices_loaded2)
+
+
+def test_remove_device_with_commands(moler_config, device_factory):
+    conn_config = os.path.join(os.path.dirname(__file__), os.pardir, "resources", "device_config.yml")
+    moler_config.load_config(config=conn_config)
+
+    device_org_name = 'UNIX_LOCAL'
+    state = "UNIX_LOCAL"
+    dev = device_factory.get_device(name=device_org_name)
+    assert dev is not None
+    dev.goto_state(state=state)
+    cmd_who_ami = dev.get_cmd(cmd_name="whoami")
+    result = cmd_who_ami()
+    assert result is not None
+    assert 'USER' in result
+    user1 = result['USER']
+    id_dev = id(dev)
+    id_io = id(dev.io_connection)
+    id_mc = id(dev.io_connection.moler_connection)
+    device_factory.remove_all_devices()
+    moler_config.load_config(config=conn_config)
+
+    for _ in range(5):
+        dev2 = device_factory.get_device(name=device_org_name)
+        dev2.goto_state(state=state)
+        cmd_who_ami2 = dev2.get_cmd(cmd_name="whoami")
+        result2 = cmd_who_ami2()
+        assert result2 is not None
+        assert 'USER' in result2
+        user2 = result2['USER']
+        assert user1 == user2
+        id_dev2 = id(dev2)
+        id_io2 = id(dev2.io_connection)
+        id_mc2 = id(dev2.io_connection.moler_connection)
+        assert dev2.name != device_org_name
+        assert dev2.public_name == device_org_name
+        assert id_dev != id_dev2
+        assert id_io != id_io2
+        assert id_mc != id_mc2
+        id_dev = id_dev2
+        id_io = id_io2
+        id_mc = id_mc2
+        dev2.remove()
 
 
 def test_can_remove_device_twice(moler_config, device_factory):

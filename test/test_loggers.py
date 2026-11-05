@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 __author__ = 'Grzegorz Latuszek, Michal Ernst, Marcin Usielski'
-__copyright__ = 'Copyright (C) 2018-2021, Nokia'
+__copyright__ = 'Copyright (C) 2018-2026, Nokia'
 __email__ = 'grzegorz.latuszek@nokia.com, michal.ernst@nokia.com, marcin.usielski@nokia.com'
 
 import logging
@@ -373,6 +373,29 @@ def test_reopen_with_new_suffix_skips_foreign_file_handler(tmp_path, monkeypatch
             logger_name=logger_name,
         )
         assert handler.baseFilename == str(foreign_path)
+    finally:
+        handler.close()
+        logger.handlers = []
+
+
+def test_close_device_logger_closes_handlers_and_forgets_logger(tmp_path, monkeypatch):
+    import moler.config.loggers as m_logger
+
+    logger_name = "closed_device_logger"
+    logger = logging.getLogger(logger_name)
+    logger.handlers = []
+
+    handler = logging.FileHandler(filename=str(tmp_path / "device.log"))
+    logger.addHandler(handler)
+    monkeypatch.setattr(m_logger, "active_loggers", {logger_name, "other_logger"})
+    monkeypatch.setattr(m_logger, "_logging_suffixes", {logger_name: ".suffix", "other_logger": ".suffix"})
+
+    try:
+        m_logger.close_device_logger(logger)
+        assert [] == logger.handlers
+        assert handler.stream is None
+        assert {"other_logger"} == m_logger.active_loggers
+        assert {"other_logger": ".suffix"} == m_logger._logging_suffixes
     finally:
         handler.close()
         logger.handlers = []

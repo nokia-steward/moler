@@ -260,6 +260,7 @@ def get_device(name, connection, device_output, test_file_path):
 
 
 def _prepare_device(device, connection, device_output):
+    # DeviceFactory ignores passed io_connection for already created device, so it may still use another connection.
     if connection != device.io_connection:
         device.exchange_io_connection(io_connection=connection)
     assert "RemoteConnection" in device.io_connection.__class__.__name__

@@ -21,8 +21,9 @@ import re
 import threading
 import time
 import traceback
+import weakref
 
-from moler.config.loggers import change_logging_suffix, configure_device_logger
+from moler.config.loggers import change_logging_suffix, close_device_logger, configure_device_logger
 from moler.connection_factory import get_connection
 from moler.connection_observer import ConnectionObserver
 from moler.device.abstract_device import AbstractDevice
@@ -109,6 +110,8 @@ class TextualDevice(AbstractDevice):
         self._reverse_state_prompts_dict = {}
         self._prompts_event = None
         self._kept_state = None
+        self._removed = False
+        self._created_observers = weakref.WeakSet()  # Commands and events created by this device.
         self._configurations = {}
         self._newline_chars = {}  # key is state, value is chars to send as newline
         if io_connection:
@@ -118,27 +121,26 @@ class TextualDevice(AbstractDevice):
                 io_type=io_type, variant=variant, **io_constructor_kwargs
             )
 
-        self.io_connection.name = self.name
-        self.io_connection.moler_connection.name = self.name
         self.logger = logging.getLogger(f"moler.connection.{self.name}")
         self.configure_logger(name=self.name, propagate=False)
+        self._attach_to_io_connection()
 
         self._stored_transitions = {}
         self._prepare_sm_data(sm_params=sm_params)
-
-        # TODO: Need test to ensure above sentence for all connection
-        self.io_connection.notify(
-            callback=self.on_connection_made, when="connection_made"
-        )
-        self.io_connection.notify(
-            callback=self.on_connection_lost, when="connection_lost"
-        )
 
         self._cmdnames_available_in_state = {}
         self._eventnames_available_in_state = {}
         self._default_prompt = re.compile(r"^[^<]*[\$|%|#|>|~]\s*$")
         self._neighbour_devices = None
         self._established = False
+        # Time [s] for remove() to wait for goto state thread to finish by itself. After that in-flight observers are
+        # cancelled to make the thread fail fast.
+        self._goto_state_thread_grace_timeout = 1
+        # Max time [s] for remove() to wait for goto state thread (after the grace time).
+        self._goto_state_thread_join_timeout = 3
+        self._goto_thread_local = threading.local()  # Marks the goto state thread, see _background_goto_aborted.
+        # Incremented when io_connection is exchanged. Goto state thread started for an older generation stops.
+        self._goto_state_generation = 0
         msg = f"Created device '{self.name}' as instance of class '{self.__class__.__module__}.{self.__class__.__name__}'."
         self._log(level=logging.DEBUG, msg=msg)
         self._public_name = None
@@ -228,22 +230,212 @@ class TextualDevice(AbstractDevice):
     def remove(self, stack_limit=6):
         """
         Closes device, if any command or event is attached to this device they will be finished.
+        Device owns its connection so the connection is closed and the moler connection is shut down. If the
+        connection is shared with a neighbour device then it is left open (the neighbour still uses it) - the device
+        only stops its own observers and the last device using the connection closes it. Cleanup (unsubscribing,
+        unlinking neighbours, removal callbacks, closing logger) is done even if closing the connection fails.
+        Removing of already removed device does nothing.
 
         :param stack_limit: how many stack frames to keep. If None then all stack frames are kept.
         :return: None
         """
+        if self._removed:
+            self._log(level=logging.DEBUG, msg=f"Device '{self.name}' is already removed.")
+            return
+        self._removed = True
         mg = pformat(traceback.format_list(traceback.extract_stack(limit=stack_limit))[::-1])
         self._log(level=logging.INFO, msg=f"Device '{self.name}' is about to remove. Requested by: {mg}\n(...)")
 
         try:
-            self.goto_state(TextualDevice.not_connected, rerun=5)
-        except DeviceChangeStateFailure:
+            self._stop_goto_state_thread(
+                timeout=self._goto_state_thread_join_timeout,
+                grace_timeout=self._goto_state_thread_grace_timeout,
+            )
+            sharing_neighbour = self._get_neighbour_sharing_io_connection()
+            if sharing_neighbour is not None:
+                self._release_shared_connection(neighbour_device=sharing_neighbour)
+            else:
+                try:
+                    self._close_owned_connection()
+                finally:
+                    # Even if closing failed the moler connection must be shut down to finish observers.
+                    try:
+                        self._set_state(TextualDevice.not_connected)
+                    finally:
+                        self.io_connection.moler_connection.shutdown()
+        finally:
+            # Cleanup below must be done even if closing of the connection failed. Otherwise removal callbacks
+            # (for example forgetting the device by Device registry) would not be called and logs would stay open.
+            try:
+                self._unsubscribe_from_io_connection(io_connection=self.io_connection)
+                self._remove_neighbour_devices()
+            finally:
+                try:
+                    super(TextualDevice, self).remove()
+                finally:
+                    self._log(level=logging.INFO, msg=f"Device '{self.name}' is closed.")
+                    self._close_logger()
+
+    def _close_owned_connection(self):
+        """
+        Leaves all states of the device and closes the connection. If leaving states fails (for any reason) then the
+        connection is closed directly.
+
+        :return: None
+        """
+        if self.has_established_connection():
+            try:
+                self.goto_state(TextualDevice.not_connected, rerun=5)
+            except Exception as ex:  # pylint: disable=broad-except
+                self._log(
+                    level=logging.WARNING,
+                    msg=f"Cannot go to state '{TextualDevice.not_connected}' while removing device '{self.name}': "
+                        f"{ex!r}. Closing connection directly.",
+                )
+                self._close_connection(None, None, None)
+        else:
             self._close_connection(None, None, None)
 
-        super(TextualDevice, self).remove()
-        msg = f"Device '{self.name}' is closed."
-        self._log(level=logging.INFO, msg=msg)
-        self._close_logger()
+    def _release_shared_connection(self, neighbour_device):
+        """
+        Detaches the device from io_connection that is shared with a neighbour device. The connection is neither
+        closed nor shut down since the neighbour device still uses it. Only commands and events created by this device
+        are cancelled. Connection name and data logger are handed over to the neighbour device.
+
+        :param neighbour_device: neighbour device that uses the same io_connection.
+        :return: None
+        """
+        self._log(
+            level=logging.INFO,
+            msg=f"Connection of device '{self.name}' is shared with device '{neighbour_device.name}', so it is not"
+                f" closed.",
+        )
+        self._stop_prompts_observers()
+        self._cancel_created_observers()
+        self._established = False
+        self._set_state(TextualDevice.not_connected)
+        self._hand_over_shared_connection(neighbour_device=neighbour_device)
+
+    def _cancel_created_observers(self, skip=None):
+        """
+        Cancels not finished commands and events created by this device.
+
+        :param skip: observer that must not be cancelled (kept as created by the device) or None.
+        :return: None
+        """
+        for observer in list(self._created_observers):
+            if skip is not None and observer is skip:
+                continue
+            try:
+                if observer.cancel():
+                    self._log(level=logging.INFO, msg=f"Cancelled '{observer}' created by device '{self.name}'.")
+            except Exception as ex:  # pylint: disable=broad-except
+                self._log(level=logging.WARNING, msg=f"Cannot cancel '{observer}': {ex!r}.")
+            self._created_observers.discard(observer)
+
+    def _hand_over_shared_connection(self, neighbour_device):
+        """
+        Makes the connection log its data to the neighbour device and use its name, if they are set to this device.
+        Otherwise data of the neighbour device would be logged to the logger closed by remove().
+
+        :param neighbour_device: neighbour device that uses the same io_connection.
+        :return: None
+        """
+        moler_connection = self.io_connection.moler_connection
+        neighbour_logger = getattr(neighbour_device, "device_data_logger", None)
+        if neighbour_logger is not None and moler_connection.data_logger is self.device_data_logger:
+            moler_connection.set_data_logger(neighbour_logger)
+        if self.io_connection.name == self.name:
+            self.io_connection.name = neighbour_device.name
+        if moler_connection.name == self.name:
+            moler_connection.name = neighbour_device.name
+
+    def _get_neighbour_sharing_io_connection(self):
+        """
+        Finds neighbour device that uses the same io_connection as this device. If found then moler connection must
+        not be shut down since it would finish observers of the neighbour device.
+
+        :return: neighbour device that shares io_connection or None if io_connection is not shared.
+        """
+        for neighbour_device in self._neighbour_devices or []:
+            if getattr(neighbour_device, "_removed", False) is True:
+                continue
+            if getattr(neighbour_device, "io_connection", None) is self.io_connection:
+                return neighbour_device
+        return None
+
+    def _stop_goto_state_thread(self, timeout=3, grace_timeout=1):
+        """
+        Drops states queued for background goto_state and waits for the background thread to finish.
+        The thread checks if the device is removed between its steps, so it usually finishes by itself within
+        grace_timeout. If it is still busy (for example waits for a command) then commands and events created by the
+        device are cancelled (except the prompts observer) to make the thread fail fast.
+
+        :param timeout: max time in seconds to wait for the thread after the grace time.
+        :param grace_timeout: time in seconds to wait for the thread before cancelling observers.
+        :return: None
+        """
+        self._kept_state = None
+        self._drop_queued_states()
+        thread = self._thread_for_goto_state
+        if thread is not None and thread is not threading.current_thread():
+            thread.join(timeout=grace_timeout)
+            if thread.is_alive():
+                self._log(
+                    logging.DEBUG,
+                    f"Thread '{thread.name}' to change state is still busy after {grace_timeout} seconds. "
+                    f"Cancelling observers.",
+                )
+                self._cancel_created_observers(skip=self._prompts_event)
+                self._drop_queued_states()
+                thread.join(timeout=timeout)
+            if thread.is_alive():
+                self._log(
+                    logging.WARNING,
+                    f"Thread '{thread.name}' to change state is still alive after {grace_timeout + timeout} seconds.",
+                )
+                # Do not queue new states for the thread that is not able to finish. A new thread will wait for the
+                # old one (they share the lock) but it will not lose the work.
+                if self._thread_for_goto_state is thread:
+                    self._thread_for_goto_state = None
+        self._kept_state = None
+
+    def _drop_queued_states(self):
+        """
+        Removes all states queued for background goto_state.
+
+        :return: None
+        """
+        while True:
+            try:
+                self._queue_states.get_nowait()
+            except queue.Empty:
+                break
+
+    def _background_goto_aborted(self):
+        """
+        Tells if the current thread is the background goto_state thread that should stop: the device is removed or
+        io_connection was exchanged after the thread was started. Only the background thread is aborted, remove()
+        itself leaves states by goto_state from its own thread.
+
+        :return: True if the background goto_state thread should stop, otherwise False.
+        """
+        if getattr(self._goto_thread_local, "is_background", False) is not True:
+            return False
+        return self._removed or self._goto_thread_local.generation != self._goto_state_generation
+
+    def _remove_neighbour_devices(self):
+        """
+        Unlinks this device from all its neighbour devices (in both directions).
+
+        :return: None
+        """
+        neighbour_devices = self._neighbour_devices or []
+        self._neighbour_devices = None
+        for neighbour_device in neighbour_devices:
+            neighbours_of_neighbour = getattr(neighbour_device, "_neighbour_devices", None)
+            if neighbours_of_neighbour and self in neighbours_of_neighbour:
+                neighbours_of_neighbour.remove(self)
 
     def has_established_connection(self):
         return self._established
@@ -282,7 +474,8 @@ class TextualDevice(AbstractDevice):
                 for device in self._neighbour_devices:
                     if isinstance(device, device_type):
                         neighbour_devices.append(device)
-        return neighbour_devices
+        # Skip removed devices, they may still be referenced by one-directional links.
+        return [device for device in neighbour_devices if getattr(device, "_removed", False) is not True]
 
     def calc_timeout_for_command(self, passed_timeout, configurations):
         command_timeout = None
@@ -308,7 +501,8 @@ class TextualDevice(AbstractDevice):
         self.io_connection.moler_connection.set_data_logger(self.device_data_logger)
 
     def _close_logger(self):
-        self.device_data_logger.handlers = []
+        if self.device_data_logger is not None:
+            close_device_logger(self.device_data_logger)
 
     @abc.abstractmethod
     def _prepare_transitions(self):
@@ -431,7 +625,8 @@ class TextualDevice(AbstractDevice):
 
             self.logger.log(level, msg, extra=extra_params)
 
-        self.device_data_logger.log(level, msg)
+        if self.device_data_logger is not None:
+            self.device_data_logger.log(level, msg)
 
     def _set_state(self, state):
         if self.current_state != state:
@@ -518,6 +713,9 @@ class TextualDevice(AbstractDevice):
     def _recover_state(self, state, keep_state=True):
         if self._goto_state_in_production_mode is False:
             return
+        if self._removed:
+            # A goto state thread outliving remove() may still set _kept_state. Removed device must not change state.
+            return
         with self._goto_state_thread_manipulation_lock:
             state_options = {
                 "dest_state": state,
@@ -540,14 +738,31 @@ class TextualDevice(AbstractDevice):
                 self._thread_for_goto_state = thread
 
     def _goto_state_thread(self):
+        self._goto_thread_local.is_background = True
+        self._goto_thread_local.generation = self._goto_state_generation
         while True:
             with self._goto_state_thread_manipulation_lock:
+                if self._background_goto_aborted():
+                    if self._removed:
+                        self._drop_queued_states()
+                    # Otherwise (exchanged io_connection) queued states belong to a newer thread, keep them.
+                    self._forget_goto_state_thread()
+                    break
                 try:
                     goto_data = self._queue_states.get(True, 0.01)
                 except queue.Empty:
-                    self._thread_for_goto_state = None
+                    self._forget_goto_state_thread()
                     break
                 self._goto_state_execute(**goto_data)
+
+    def _forget_goto_state_thread(self):
+        """
+        Clears reference to the current thread. Reference to another (newer) goto state thread is left untouched.
+
+        :return: None
+        """
+        if self._thread_for_goto_state is threading.current_thread():
+            self._thread_for_goto_state = None
 
     def _goto_state_execute(
         self,
@@ -611,6 +826,9 @@ class TextualDevice(AbstractDevice):
         next_stage_timeout = final_timeout
 
         while (not is_dest_state) and (not is_timeout):
+            if self._background_goto_aborted():
+                self._log(logging.DEBUG, f"Device '{self.name}' is removed. Stopped going to state '{dest_state}'.")
+                return
             next_state = self._get_next_state(dest_state)
             if self.current_state != dest_state:
                 self._trigger_change_state(
@@ -628,6 +846,8 @@ class TextualDevice(AbstractDevice):
                 next_stage_timeout = final_timeout - (time.monotonic() - start_time)
                 if next_stage_timeout <= 0:
                     is_timeout = True
+        if self._background_goto_aborted():
+            return
         if self._sleep_after_state_change is not None and self._sleep_after_state_change > 0:
             time.sleep(self._sleep_after_state_change)
         if keep_state:
@@ -706,7 +926,7 @@ class TextualDevice(AbstractDevice):
                     ex_traceback = traceback.format_exc()
                     msg = f"Method to change state failed but device '{self.name}' is in proper state '{self.current_state}'. Exception: {ex_traceback}"
                     self._log(logging.WARNING, msg=msg)
-                elif retrying == rerun:
+                elif retrying == rerun or self._background_goto_aborted():  # No retries for removed device.
                     ex_traceback = traceback.format_exc()
                     exc = DeviceChangeStateFailure(
                         device=self.__class__.__name__,
@@ -897,6 +1117,7 @@ class TextualDevice(AbstractDevice):
                     raise exc
 
             observer._validate_start = validate_device_state_before_observer_start  # pylint: disable=protected-access
+        self._created_observers.add(observer)
         return observer
 
     def get_cmd(self, cmd_name, cmd_params=None, check_state=True, for_state=None):
@@ -1027,12 +1248,92 @@ class TextualDevice(AbstractDevice):
             self.states.append(state)
 
     def exchange_io_connection(self, io_connection):
-        self._close_connection(None, None, None)
+        """
+        Replaces io_connection of the device. The old connection is released: device stops observing it, cancels
+        commands and events created on it and closes it (unless it is still used by a neighbour device).
+
+        :param io_connection: new io_connection for the device.
+        :return: None
+        """
+        if io_connection is self.io_connection:
+            return
+        self._detach_from_io_connection()
         self.io_connection = io_connection
         self.io_connection.set_device(self)
         self.io_connection.open()
+        # Attached after open, so on_connection_made does not interfere with the state set below.
+        self._attach_to_io_connection()
         self._set_state("UNIX_LOCAL")
         self._run_prompts_observers()
+
+    def _attach_to_io_connection(self):
+        """
+        Makes the current io_connection log data to the device logger, use the device name and notify the device
+        about connection made and lost.
+
+        :return: None
+        """
+        self.io_connection.name = self.name
+        self.io_connection.moler_connection.name = self.name
+        if self.device_data_logger is not None:
+            self.io_connection.moler_connection.set_data_logger(self.device_data_logger)
+        self.io_connection.notify(
+            callback=self.on_connection_made, when="connection_made"
+        )
+        self.io_connection.notify(
+            callback=self.on_connection_lost, when="connection_lost"
+        )
+
+    def _unsubscribe_from_io_connection(self, io_connection):
+        """
+        Stops notifying the device about connection made and lost. Connections without unsubscribe methods (not
+        derived from IOConnection) are skipped.
+
+        :param io_connection: io_connection to unsubscribe from.
+        :return: None
+        """
+        for method_name, callback in (
+            ("unsubscribe_on_connection_made", self.on_connection_made),
+            ("unsubscribe_on_connection_lost", self.on_connection_lost),
+        ):
+            unsubscribe = getattr(io_connection, method_name, None)
+            if unsubscribe is None:
+                self._log(
+                    level=logging.DEBUG,
+                    msg=f"Connection '{io_connection.__class__.__name__}' has no method '{method_name}'. Skipped.",
+                )
+                continue
+            unsubscribe(subscriber=callback)
+
+    def _detach_from_io_connection(self):
+        """
+        Releases the current io_connection. If it is shared with a neighbour device then it is handed over to the
+        neighbour, otherwise it is closed and its moler connection is shut down.
+        Background goto state thread that works on the connection is stopped before the connection is released. Its
+        pending states and kept state are dropped since they were meant for the old connection.
+
+        :return: None
+        """
+        io_connection = self.io_connection
+        # Goto state thread started before this point stops between its steps (the device is not removed so the
+        # generation is used instead of _removed).
+        self._goto_state_generation += 1
+        self._stop_goto_state_thread(
+            timeout=self._goto_state_thread_join_timeout,
+            grace_timeout=self._goto_state_thread_grace_timeout,
+        )
+        self._unsubscribe_from_io_connection(io_connection=io_connection)
+        self._stop_prompts_observers()
+        self._cancel_created_observers()
+        sharing_neighbour = self._get_neighbour_sharing_io_connection()
+        if sharing_neighbour is not None:
+            self._hand_over_shared_connection(neighbour_device=sharing_neighbour)
+            self._established = False
+        else:
+            try:
+                self._close_connection(None, None, None)
+            finally:
+                io_connection.moler_connection.shutdown()
 
     # pylint: disable-next=unused-argument
     def _open_connection(self, source_state, dest_state, timeout):

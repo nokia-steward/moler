@@ -5,12 +5,15 @@ Moler's device has 2 main responsibilities:
 - be the state machine that controls which commands may run in given state
 """
 __author__ = "Marcin Usielski"
-__copyright__ = "Copyright (C) 2019-2024, Nokia"
+__copyright__ = "Copyright (C) 2019-2026, Nokia"
 __email__ = "marcin.usielski@nokia.com"
 
 import abc
+import logging
 
 import six
+
+_logger = logging.getLogger(__name__)
 
 
 @six.add_metaclass(abc.ABCMeta)
@@ -224,5 +227,16 @@ class AbstractDevice:
 
         :return: None
         """
-        for callback in self._remove_callbacks:
-            callback()
+        callbacks = self._remove_callbacks
+        self._remove_callbacks = []
+        first_exception = None
+        for callback in callbacks:
+            # One failing callback must not prevent calling the others (they are not kept for a retry).
+            try:
+                callback()
+            except Exception as ex:  # pylint: disable=broad-except
+                _logger.warning("Device removal callback %r failed: %r", callback, ex, exc_info=True)
+                if first_exception is None:
+                    first_exception = ex
+        if first_exception is not None:
+            raise first_exception

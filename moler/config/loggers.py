@@ -4,7 +4,7 @@ Configure logging for Moler's needs
 """
 
 __author__ = "Grzegorz Latuszek, Marcin Usielski, Michal Ernst"
-__copyright__ = "Copyright (C) 2018-2025, Nokia"
+__copyright__ = "Copyright (C) 2018-2026, Nokia"
 __email__ = (
     "grzegorz.latuszek@nokia.com, marcin.usielski@nokia.com, michal.ernst@nokia.com"
 )
@@ -16,6 +16,7 @@ import os
 import platform
 import re
 import sys
+import threading
 import traceback
 from logging.handlers import RotatingFileHandler, TimedRotatingFileHandler
 from importlib_metadata import version, PackageNotFoundError, distributions
@@ -31,6 +32,8 @@ from moler.util.compressed_timed_rotating_file_handler import (
 _logging_path = os.getcwd()  # Logging path that is used as a prefix for log file paths
 _logging_suffixes = {}  # Suffix for log files. None for nothing.
 active_loggers = set()  # Active loggers created by Moler
+_device_loggers_lock = threading.RLock()  # Protects removing from active_loggers and _device_loggers_users
+_device_loggers_users = {}  # Number of devices using device logger. Key is logger name.
 _console_loggers = set()  # Loggers that should log to console
 date_format = "%d %H:%M:%S"
 
@@ -341,7 +344,7 @@ def _reopen_all_logfiles_with_new_suffix(logger_suffixes, new_suffix, logger_nam
     :param logger_name: name of logger. None for all loggers.
     :return: None
     """
-    for current_logger_name in active_loggers:
+    for current_logger_name in list(active_loggers):
         if logger_name is not None and logger_name != current_logger_name:
             continue
         logger = logging.getLogger(current_logger_name)
@@ -406,7 +409,7 @@ def reconfigure_logging_path(log_path):
 
 
 def _reopen_all_logfiles_in_new_path(old_logging_path, new_logging_path):
-    for logger_name in active_loggers:
+    for logger_name in list(active_loggers):
         logger = logging.getLogger(logger_name)
         logger_handlers = copy.copy(logger.handlers)
 
@@ -743,42 +746,75 @@ def configure_runner_logger(runner_name):
 
 
 def configure_device_logger(connection_name, propagate=False):
-    """Configure logger with file storing connection's log"""
+    """
+    Configure logger with file storing connection's log.
+
+    The logger is shared by all devices of the same name. Each call registers one more user of the logger, so
+    every call should be paired with close_device_logger() when the user (device) is not interested in the logger
+    anymore.
+    """
     logger_name = f"moler.{connection_name}"
-    if logger_name not in active_loggers:
-        logger = create_logger(name=logger_name, log_level=TRACE)
-        logger.propagate = propagate
-        conn_formatter = MultilineWithDirectionFormatter(
-            fmt="%(asctime)s.%(msecs)03d %(transfer_direction)s|%(message)s",
-            datefmt=date_format,
-        )
-        _add_new_file_handler(
-            logger_name=logger_name,
-            log_file=f"{logger_name}.log",
-            log_level=logging.INFO,
-            formatter=conn_formatter,
-        )
-        if want_log_console(logger_name):
-            _add_stdout_file_handler(
+    with _device_loggers_lock:
+        if logger_name not in active_loggers:
+            logger = create_logger(name=logger_name, log_level=TRACE)
+            logger.propagate = propagate
+            conn_formatter = MultilineWithDirectionFormatter(
+                fmt="%(asctime)s.%(msecs)03d %(transfer_direction)s|%(message)s",
+                datefmt=date_format,
+            )
+            _add_new_file_handler(
                 logger_name=logger_name,
-                formatter=conn_formatter,
+                log_file=f"{logger_name}.log",
                 log_level=logging.INFO,
+                formatter=conn_formatter,
             )
-        if want_raw_logs():
-            # RAW_LOGS is lowest log-level so we need to change log-level of logger
-            # to make it pass data into raw-log-handler
-            logger.setLevel(min(RAW_DATA, TRACE))
-            _add_raw_file_handler(
-                logger_name=logger_name, log_file=f"{logger_name}.raw.log"
-            )
-            if debug_level == TRACE:
-                _add_raw_trace_file_handler(
+            if want_log_console(logger_name):
+                _add_stdout_file_handler(
                     logger_name=logger_name,
-                    log_file=f"{logger_name}.raw.trace.log",
+                    formatter=conn_formatter,
+                    log_level=logging.INFO,
                 )
-    else:
-        logger = logging.getLogger(logger_name)
+            if want_raw_logs():
+                # RAW_LOGS is lowest log-level so we need to change log-level of logger
+                # to make it pass data into raw-log-handler
+                logger.setLevel(min(RAW_DATA, TRACE))
+                _add_raw_file_handler(
+                    logger_name=logger_name, log_file=f"{logger_name}.raw.log"
+                )
+                if debug_level == TRACE:
+                    _add_raw_trace_file_handler(
+                        logger_name=logger_name,
+                        log_file=f"{logger_name}.raw.trace.log",
+                    )
+        else:
+            logger = logging.getLogger(logger_name)
+        _device_loggers_users[logger_name] = _device_loggers_users.get(logger_name, 0) + 1
     return logger
+
+
+def close_device_logger(logger):
+    """
+    Release device logger. When the last user of the logger releases it then all handlers are closed and detached
+    and the logger is forgotten, so a device created later with the same name gets freshly configured handlers.
+    While other devices still use the logger (devices of the same name share it) it is left untouched.
+
+    :param logger: logger returned by configure_device_logger.
+    :return: None
+    """
+    with _device_loggers_lock:
+        users = _device_loggers_users.get(logger.name, 0) - 1
+        if users > 0:
+            _device_loggers_users[logger.name] = users
+            return
+        _device_loggers_users.pop(logger.name, None)
+        for handler in list(logger.handlers):
+            logger.removeHandler(handler)
+            try:
+                handler.close()
+            except Exception:  # pylint: disable=broad-except
+                pass
+        active_loggers.discard(logger.name)
+        _logging_suffixes.pop(logger.name, None)
 
 
 def _prepare_logs_folder(logfile_full_path):

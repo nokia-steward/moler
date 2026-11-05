@@ -24,7 +24,7 @@ import fcntl
 import logging
 
 __author__ = 'Grzegorz Latuszek'
-__copyright__ = 'Copyright (C) 2018, Nokia'
+__copyright__ = 'Copyright (C) 2018-2026, Nokia'
 __email__ = 'grzegorz.latuszek@nokia.com'
 
 import asyncio
@@ -183,6 +183,22 @@ class AsyncioInThreadTerminal(IOConnection):
         :return: None
         """
         self._async_terminal.notify(callback, when)
+
+    def unsubscribe_on_connection_made(self, subscriber):
+        """
+        Remove subscriber from list of functions to call when connection is open/established
+        :param subscriber: reference to function registered by method notify
+        :return: None
+        """
+        self._async_terminal.unsubscribe_on_connection_made(subscriber)
+
+    def unsubscribe_on_connection_lost(self, subscriber):
+        """
+        Remove subscriber from list of functions to call when connection is closed/disconnected
+        :param subscriber: reference to function registered by method notify
+        :return: None
+        """
+        self._async_terminal.unsubscribe_on_connection_lost(subscriber)
 
     @property
     def name(self):
