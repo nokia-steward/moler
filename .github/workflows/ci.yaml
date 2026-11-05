@@ -28,20 +28,37 @@ jobs:
           pip install -Ur requirements/test.txt
       - name:  Create local users required by integration tests
         if: matrix.os == 'ubuntu-latest'
+        timeout-minutes: 10
         run: |
-          sudo apt-get -y install sshpass
+          retry() {
+            local max_attempts=5
+            local delay=10
+            local attempt=1
+            until "$@"; do
+              if [ "$attempt" -ge "$max_attempts" ]; then
+                echo "---- '$*' failed after $attempt attempts"
+                return 1
+              fi
+              echo "---- '$*' failed (attempt $attempt/$max_attempts), retrying in ${delay}s"
+              attempt=$((attempt + 1))
+              sleep "$delay"
+            done
+          }
+          create_user() {
+            local name=$1 comment=$2 password=$3
+            id -u "$name" >/dev/null 2>&1 || sudo useradd "$name" -c "$comment" -s /bin/bash -l -m
+            echo "$name:$password" | sudo chpasswd
+          }
+          retry sh -c 'sudo apt-get update && sudo apt-get -y install sshpass'
           cat /etc/passwd | grep home
-          sudo useradd molerssh -c MolerSshTest -s /bin/bash -l -m
-          echo 'molerssh:moler_password' | sudo chpasswd
-          sudo useradd sshproxy -c Proxy4SshTest -s /bin/bash -l -m
-          echo 'sshproxy:proxy_password' | sudo chpasswd
-          sudo useradd adbshell -c AdbShell4SshTest -s /bin/bash -l -m
-          echo 'adbshell:adb_password' | sudo chpasswd
+          retry create_user molerssh MolerSshTest moler_password
+          retry create_user sshproxy Proxy4SshTest proxy_password
+          retry create_user adbshell AdbShell4SshTest adb_password
           cat /etc/passwd | grep home
           echo ---- try logging as integration tests users via ssh
-          sshpass -p moler_password ssh -oStrictHostKeyChecking=no molerssh@localhost pwd
-          sshpass -p proxy_password ssh -oStrictHostKeyChecking=no sshproxy@localhost pwd
-          sshpass -p adb_password ssh -oStrictHostKeyChecking=no adbshell@localhost pwd
+          retry sshpass -p moler_password ssh -oStrictHostKeyChecking=no molerssh@localhost pwd
+          retry sshpass -p proxy_password ssh -oStrictHostKeyChecking=no sshproxy@localhost pwd
+          retry sshpass -p adb_password ssh -oStrictHostKeyChecking=no adbshell@localhost pwd
       - name:  Upload adb simulator
         if: matrix.os == 'ubuntu-latest'
         run: |
@@ -56,7 +73,6 @@ jobs:
         timeout-minutes: 30
         run: |
           python -m pytest -vvvsss test/
-          # python -m pytest -c py3pytest.ini -vvvsss test/
       - name: Test with pytest and coverage
         if: ${{ (matrix.python-version == env.PYTHON_COVERAGE) && (matrix.os == 'ubuntu-latest') }}
         timeout-minutes: 49
