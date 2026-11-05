@@ -99,7 +99,7 @@ class RunnerSingleThread(ConnectionObserverRunner):
                 )
             self.logger.debug(f"go foreground: {connection_observer} - {msg}")
             connection_observer.life_status.start_time = start_time
-            connection_observer.life_status.timeout = current_time + await_timeout - start_time
+            connection_observer.life_status.timeout = await_timeout
             self._wait_for_connection_observer_done(connection_observer=connection_observer, timeout=max_timeout)
         return None
 

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 __author__ = 'Michal Ernst, Marcin Usielski'
-__copyright__ = 'Copyright (C) 2018-2023, Nokia'
+__copyright__ = 'Copyright (C) 2018-2026, Nokia'
 __email__ = 'michal.ernst@nokia.com, marcin.usielski@nokia.com'
 
 import pytest
@@ -12,7 +12,7 @@ from moler.util.moler_test import MolerTest
 
 
 def __check_connection_observer_exception(err):
-    assert "some error inside observer" in str(err)
+    assert "some error inside observer" in str(err.value)
 
 
 def test_moler_test_warn():

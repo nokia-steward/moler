@@ -41,6 +41,7 @@ def test_can_retrieve_connection_observer_start_time(do_nothing_connection_obser
     time2 = time.monotonic()
     assert connection_observer.start_time >= time1
     assert connection_observer.start_time <= time2
+    connection_observer.cancel()
 
 
 # str representation of class instances may be specific for given class - means: each derived class
