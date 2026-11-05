@@ -3,7 +3,7 @@
 Testing of uptime command.
 """
 __author__ = 'Marcin Usielski'
-__copyright__ = 'Copyright (C) 2018-2019, Nokia'
+__copyright__ = 'Copyright (C) 2018-2026, Nokia'
 __email__ = 'marcin.usielski@nokia.com'
 
 import pytest
@@ -68,6 +68,32 @@ def test_timeout_before_command_sent(buffer_connection, command_output_and_expec
         uptime_cmd(timeout=0.2)
     buffer_connection.moler_connection.data_received(command_output[1].encode("utf-8"), datetime.datetime.now())
     ping_cmd.await_done(timeout=0.2)
+    ping_ret = ping_cmd.result()
+    assert ping_ret == expected_result
+
+
+def test_timeout_before_command_sent_with_observer_timeout(buffer_connection,
+                                                           command_output_and_expected_result_ping):
+    from moler.cmd.unix.uptime import Uptime
+    from moler.cmd.unix.ping import Ping
+    command_output, expected_result = command_output_and_expected_result_ping
+    ping_cmd = Ping(connection=buffer_connection.moler_connection, prompt="host:.*#", destination="localhost",
+                    options="-w 5")
+    uptime_cmd = Uptime(connection=buffer_connection.moler_connection, prompt="host:.*#")
+    uptime_cmd.terminating_timeout = 0
+    ping_cmd.start(timeout=3)
+    time.sleep(0.05)
+    buffer_connection.moler_connection.data_received(command_output[0].encode("utf-8"), datetime.datetime.now())
+    start_time = time.monotonic()
+    uptime_cmd.start(timeout=0.5)
+    time.sleep(0.4)  # must be shorter than uptime timeout to await still queued command
+    with pytest.raises(CommandTimeout):
+        uptime_cmd.await_done()
+    duration = time.monotonic() - start_time
+    assert duration >= 0.5
+    assert duration < 0.8
+    buffer_connection.moler_connection.data_received(command_output[1].encode("utf-8"), datetime.datetime.now())
+    ping_cmd.await_done(timeout=0.5)
     ping_ret = ping_cmd.result()
     assert ping_ret == expected_result
 
