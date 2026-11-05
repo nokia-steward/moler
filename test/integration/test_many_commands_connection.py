@@ -7,6 +7,7 @@ __copyright__ = 'Copyright (C) 2018-2026, Nokia'
 __email__ = 'marcin.usielski@nokia.com'
 
 import pytest
+import threading
 import time
 from moler.event_awaiter import EventAwaiter
 from moler.exceptions import CommandTimeout
@@ -96,6 +97,86 @@ def test_timeout_before_command_sent_with_observer_timeout(buffer_connection,
     ping_cmd.await_done(timeout=0.5)
     ping_ret = ping_cmd.result()
     assert ping_ret == expected_result
+
+
+def test_timeout_before_command_sent_with_terminating_timeout(buffer_connection,
+                                                              command_output_and_expected_result_ping):
+    """Queued command that never started must time out after its timeout only (terminating_timeout is not added)."""
+    from moler.cmd.unix.uptime import Uptime
+    from moler.cmd.unix.ping import Ping
+    command_output, expected_result = command_output_and_expected_result_ping
+    ping_cmd = Ping(connection=buffer_connection.moler_connection, prompt="host:.*#", destination="localhost",
+                    options="-w 5")
+    uptime_cmd = Uptime(connection=buffer_connection.moler_connection, prompt="host:.*#")
+    uptime_cmd.terminating_timeout = 2.0
+    ping_cmd.start(timeout=3)
+    time.sleep(0.05)
+    buffer_connection.moler_connection.data_received(command_output[0].encode("utf-8"), datetime.datetime.now())
+    start_time = time.monotonic()
+    uptime_cmd.start(timeout=0.5)
+    time.sleep(0.4)  # must be shorter than uptime timeout to await still queued command
+    with pytest.raises(CommandTimeout):
+        uptime_cmd.await_done()
+    duration = time.monotonic() - start_time
+    assert duration >= 0.5
+    assert duration < 0.8  # terminating_timeout (2.0) must not be added for a command that was never sent
+    assert uptime_cmd.life_status.in_terminating is False
+    buffer_connection.moler_connection.data_received(command_output[1].encode("utf-8"), datetime.datetime.now())
+    ping_cmd.await_done(timeout=0.5)
+    ping_ret = ping_cmd.result()
+    assert ping_ret == expected_result
+
+
+def test_timeout_of_running_command_with_terminating_timeout(buffer_connection,
+                                                             command_output_and_expected_result_ping):
+    """Running command that timeouts is given terminating_timeout to finish; observer timeout must not be inflated."""
+    from moler.cmd.unix.ping import Ping
+    command_output, _ = command_output_and_expected_result_ping
+    ping_cmd = Ping(connection=buffer_connection.moler_connection, prompt="host:.*#", destination="localhost",
+                    options="-w 5")
+    ping_cmd.terminating_timeout = 0.4
+    start_time = time.monotonic()
+    ping_cmd.start(timeout=0.5)
+    time.sleep(0.05)
+    buffer_connection.moler_connection.data_received(command_output[0].encode("utf-8"), datetime.datetime.now())
+    time.sleep(0.25)  # must be shorter than timeout; elapsed time must not be added to the timeout by await_done
+    with pytest.raises(CommandTimeout):
+        ping_cmd.await_done()  # no prompt after Ctrl+C, so it lasts timeout + terminating_timeout
+    duration = time.monotonic() - start_time
+    assert ping_cmd.life_status.in_terminating is True
+    assert ping_cmd.timeout == 0.5
+    assert duration >= 0.9  # timeout (0.5) + terminating_timeout (0.4)
+    assert duration < 1.1  # old behaviour (timeout inflated by elapsed time) gave about 1.2
+
+
+def test_prompt_after_ctrl_c_during_terminating_timeout(buffer_connection, command_output_and_expected_result_ping):
+    """Running command that timeouts finishes as soon as prompt comes after Ctrl+C (not after terminating_timeout)."""
+    from moler.cmd.unix.ping import Ping
+    command_output, _ = command_output_and_expected_result_ping
+    ping_cmd = Ping(connection=buffer_connection.moler_connection, prompt="host:.*#", destination="localhost",
+                    options="-w 5")
+    ping_cmd.terminating_timeout = 2.0
+    prompt_after_ctrl_c = "^C\n--- localhost ping statistics ---\nhost:~ # "
+    start_time = time.monotonic()
+    ping_cmd.start(timeout=0.5)
+    time.sleep(0.05)
+    buffer_connection.moler_connection.data_received(command_output[0].encode("utf-8"), datetime.datetime.now())
+    time.sleep(0.25)  # must be shorter than timeout; elapsed time must not be added to the timeout by await_done
+    # Remote side answers to Ctrl+C (sent on timeout, at ~0.5 sec) 0.2 sec later.
+    prompt_timer = threading.Timer(0.7 - (time.monotonic() - start_time),
+                                   lambda: buffer_connection.moler_connection.data_received(
+                                       prompt_after_ctrl_c.encode("utf-8"), datetime.datetime.now()))
+    prompt_timer.start()
+    try:
+        with pytest.raises(CommandTimeout):
+            ping_cmd.await_done()
+    finally:
+        prompt_timer.join()
+    duration = time.monotonic() - start_time
+    assert ping_cmd.life_status.in_terminating is True
+    assert ping_cmd.timeout == 0.5
+    assert duration >= 0.7  # not finished before the prompt
+    assert duration < 1.0  # finished on prompt, long before timeout + terminating_timeout (2.5)
 
 
 @pytest.fixture
