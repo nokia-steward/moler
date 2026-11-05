@@ -7,7 +7,7 @@ Testing external-IO SSH connection
 """
 
 __author__ = 'Grzegorz Latuszek, Marcin Usielski'
-__copyright__ = 'Copyright (C) 2020-2024, Nokia'
+__copyright__ = 'Copyright (C) 2020-2026, Nokia'
 __email__ = 'grzegorz.latuszek@nokia.com, marcin.usielski@nokia.com'
 
 
@@ -484,11 +484,19 @@ def test_send_can_timeout(sshshell_connection):
     from moler.io.io_exceptions import ConnectionTimeout
     connection = sshshell_connection
     with connection.open():
-        with pytest.raises(ConnectionTimeout) as exc:
-            big_data = "123456789 " * 10000
-            request = f"echo {big_data}\n"
-            bytes2send = request.encode("utf-8")
-            for x in range(10):
+        big_data = "123456789 " * 10000
+        request = f"echo {big_data}\n"
+        bytes2send = request.encode("utf-8")
+
+        original_send = connection._shell_channel.send
+
+        def slow_send_in_small_chunks(data):
+            # fast machine may push whole data via localhost ssh before timeout, so emulate slow channel
+            time.sleep(0.002)
+            return original_send(data[:100])
+
+        with mock.patch.object(connection._shell_channel, "send", slow_send_in_small_chunks):
+            with pytest.raises(ConnectionTimeout) as exc:
                 connection.send(bytes2send, timeout=0.0005)
         assert "Timeout (> 0.001 sec) on ssh://molerssh@localhost:22" in str(exc.value)
 
