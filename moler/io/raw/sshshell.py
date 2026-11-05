@@ -12,7 +12,7 @@ The only 3 requirements for these connections are:
 """
 
 __author__ = 'Grzegorz Latuszek, Marcin Usielski'
-__copyright__ = 'Copyright (C) 2020-2024, Nokia'
+__copyright__ = 'Copyright (C) 2020-2026, Nokia'
 __email__ = 'grzegorz.latuszek@nokia.com, marcin.usielski@nokia.com'
 
 import socket
@@ -240,7 +240,6 @@ class SshShell:
                 nb_bytes_sent += chunk_bytes_sent
             else:
                 time.sleep(self.await_ready_tick_resolution)
-                nb_bytes_sent = 0
             if nb_bytes_sent >= nb_bytes_to_send:
                 break
             if time.monotonic() - start_time >= timeout:
