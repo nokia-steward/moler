@@ -9,10 +9,8 @@ __author__ = 'Grzegorz Latuszek, Marcin Usielski, Michal Ernst'
 __copyright__ = 'Copyright (C) 2018-2026, Nokia'
 __email__ = 'grzegorz.latuszek@nokia.com, marcin.usielski@nokia.com, michal.ernst@nokia.com'
 
-import atexit
 import concurrent.futures
 import logging
-import sys
 import threading
 import time
 import traceback
@@ -232,23 +230,16 @@ class ThreadPoolExecutorRunner(ConnectionObserverRunner):
             self.logger.debug(f"reusing provided executor {self.executor!r}")
 
     def _register_autoshutdown(self):
-        if sys.version_info < (3, 9):
-            atexit.register(self.shutdown)
-            # atexit registered callback is called after python stops all non-daemon threads
+        # ThreadPoolExecutor creates non-daemon threads
+        # we use same "private" machinery of threading as concurrent.futures
 
-            # Python 2.7, 3.6, 3.7, 3.8 - ThreadPoolExecutor creates daemon threads
-            # so, we can reach atexit callback
-        else:
-            # Python 3.9 - ThreadPoolExecutor creates non-daemon threads
-            # we use same "private" machinery of threading as concurrent.futures of Python 3.9
+        # Register for `_python_exit()` to be called just before joining all
+        # non-daemon threads. This is used instead of `atexit.register()` for
+        # compatibility with subinterpreters, which no longer support daemon threads.
+        # See bpo-39812 for context.
 
-            # Register for `_python_exit()` to be called just before joining all
-            # non-daemon threads. This is used instead of `atexit.register()` for
-            # compatibility with subinterpreters, which no longer support daemon threads.
-            # See bpo-39812 for context.
-
-            # noinspection PyUnresolvedReferences
-            threading._register_atexit(self.shutdown)  # pylint: disable=protected-access
+        # noinspection PyUnresolvedReferences
+        threading._register_atexit(self.shutdown)  # pylint: disable=protected-access
 
     def is_in_shutdown(self):
         """
