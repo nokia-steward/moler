@@ -1,22 +1,19 @@
 # -*- coding: utf-8 -*-
 
 __author__ = "Marcin Usielski, Tomasz Krol"
-__copyright__ = "Copyright (C) 2018-2020, Nokia"
+__copyright__ = "Copyright (C) 2018-2026, Nokia"
 __email__ = "marcin.usielski@nokia.com, tomasz.krol@nokia.com"
 
 import abc
 import datetime
 import re
 
-import six
-
 from moler.events.textualevent import TextualEvent
 from moler.exceptions import NoDetectPatternProvided, WrongUsage
 from moler.helpers import convert_to_number, copy_list, instance_id
 
 
-@six.add_metaclass(abc.ABCMeta)
-class LineEvent(TextualEvent):
+class LineEvent(TextualEvent, metaclass=abc.ABCMeta):
     def __init__(
         self,
         detect_patterns,

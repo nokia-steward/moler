@@ -114,7 +114,7 @@ def test_RawDataFormatter_uses_encoder_of_log_record():
 
 def test_RawTraceFormatter_produces_yaml_record():
     from moler.config.loggers import RAW_DATA, RawTraceFormatter, date_format
-    import mock
+    from unittest import mock
     trace_formatter = RawTraceFormatter()
     binary_msg = b"127.0.0.1 \xe2\x86\x92 ttl"
     now = time.monotonic()
@@ -291,7 +291,7 @@ def test_raw_trace_log_can_be_yaml_loaded(monkeypatch):
 def test_reconfigure_moler_loggers():
     import moler.config.loggers as m_logger
     import os
-    import mock
+    from unittest import mock
     from logging import FileHandler
 
     dummy_handler = [FileHandler(filename=os.path.join(m_logger._logging_path, 'moler.log'))]

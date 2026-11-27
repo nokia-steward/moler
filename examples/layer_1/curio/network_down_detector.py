@@ -3,7 +3,7 @@
 curio.network_down_detector.py
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-A fully-functional connection-observer using curio. Requires Python 3.6+.
+A fully-functional connection-observer using curio. Requires Python 3.10+.
 
 This example demonstrates basic concept of connection observer - entity
 that is fully responsible for:
@@ -18,7 +18,7 @@ Another words - low level manual combining of all the pieces.
 """
 
 __author__ = 'Grzegorz Latuszek'
-__copyright__ = 'Copyright (C) 2018, Nokia'
+__copyright__ = 'Copyright (C) 2018-2026, Nokia'
 __email__ = 'grzegorz.latuszek@nokia.com'
 
 import logging

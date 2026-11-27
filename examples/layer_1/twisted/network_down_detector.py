@@ -4,7 +4,7 @@ twisted.network_down_detector.py
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 A fully-functional connection-observer using twisted.
-Works on Python 2.7 as well as on 3.6
+Works on Python 3.10+
 
 This example demonstrates basic concept of connection observer - entity
 that is fully responsible for:
@@ -19,7 +19,7 @@ Another words - low level manual combining of all the pieces.
 """
 
 __author__ = 'Grzegorz Latuszek'
-__copyright__ = 'Copyright (C) 2018, Nokia'
+__copyright__ = 'Copyright (C) 2018-2026, Nokia'
 __email__ = 'grzegorz.latuszek@nokia.com'
 
 import logging

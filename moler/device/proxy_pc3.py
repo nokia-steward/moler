@@ -6,17 +6,15 @@ Moler's device has 2 main responsibilities:
 """
 
 __author__ = 'Michal Ernst, Marcin Usielski'
-__copyright__ = 'Copyright (C) 2018-2025, Nokia'
+__copyright__ = 'Copyright (C) 2018-2026, Nokia'
 __email__ = 'michal.ernst@nokia.com, marcin.usielski@nokia.com'
-import six
 import abc
 
 from moler.device.unixlocal import UnixLocal
 from moler.exceptions import DeviceFailure
 
 
-@six.add_metaclass(abc.ABCMeta)
-class ProxyPc3(UnixLocal):
+class ProxyPc3(UnixLocal, metaclass=abc.ABCMeta):
     proxy_pc = "PROXY_PC"
 
     def __init__(self, sm_params, name=None, io_connection=None, io_type=None, variant=None, io_constructor_kwargs=None,

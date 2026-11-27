@@ -4,11 +4,10 @@ Generic command class for commands change prompt
 """
 
 __author__ = 'Marcin Usielski'
-__copyright__ = 'Copyright (C) 2019-2024, Nokia'
+__copyright__ = 'Copyright (C) 2019-2026, Nokia'
 __email__ = 'marcin.usielski@nokia.com'
 
 import abc
-import six
 import re
 
 from moler.cmd.commandtextualgeneric import CommandTextualGeneric
@@ -16,8 +15,7 @@ from moler.exceptions import ParsingDone
 from moler.helpers import regexp_without_anchors
 
 
-@six.add_metaclass(abc.ABCMeta)
-class CommandChangingPrompt(CommandTextualGeneric):
+class CommandChangingPrompt(CommandTextualGeneric, metaclass=abc.ABCMeta):
     """Base class for textual commands to change prompt."""
 
     def __init__(self, connection, prompt, expected_prompt, newline_chars=None, runner=None,

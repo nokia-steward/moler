@@ -791,9 +791,7 @@ class AsyncioInThreadRunner(AsyncioRunner):
         self.logger.debug(f"returning iterator for {connection_observer}")
         while not connection_observer_future.done():
             yield None
-        # return result_for_runners(connection_observer)  # May raise too.   # Python > 3.3
-        res = result_for_runners(connection_observer)
-        raise StopIteration(res)  # Python 2 compatibility
+        return result_for_runners(connection_observer)  # May raise too.
 
 
 def cleanup_remaining_tasks(loop, logger):

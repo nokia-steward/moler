@@ -2,13 +2,13 @@ from importlib import import_module
 from os import path, walk
 from os.path import isfile, join, abspath, dirname
 
-from mock import mock
+from unittest import mock
 from pytest import mark, raises
 
 from moler.command import Command
 
 __author__ = 'Michal Plichta, Michal Ernst'
-__copyright__ = 'Copyright (C) 2018-2019, Nokia'
+__copyright__ = 'Copyright (C) 2018-2026, Nokia'
 __email__ = 'michal.plichta@nokia.com, michal.ernst@nokia.com'
 
 cmd_dir_under_test = 'moler/cmd/'
@@ -108,7 +108,6 @@ def test_walk_moler_python_files_is_generator_return_all_files_in_dir():
 
 def test_walk_moler_commands_is_generator_return_all_files_in_dir():
     from moler.util.cmds_events_doc import _walk_moler_commands
-    from six.moves import zip
 
     file_list = _list_in_path(listing_type='only_py')
     abs_test_path = join(repo_path, cmd_dir_under_test)

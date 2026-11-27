@@ -11,16 +11,15 @@ Main focus is on runner and it's correctness.
 """
 
 __author__ = 'Grzegorz Latuszek'
-__copyright__ = 'Copyright (C) 2018, Nokia'
+__copyright__ = 'Copyright (C) 2018-2026, Nokia'
 __email__ = 'grzegorz.latuszek@nokia.com'
 
 import re
 import threading
 import time
-import platform
 import importlib
 import asyncio
-import mock
+from unittest import mock
 import pytest
 import contextlib
 import datetime

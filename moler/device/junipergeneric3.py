@@ -4,19 +4,17 @@ Juniper Generic module.
 """
 
 __author__ = 'Sylwester Golonka, Jakub Kupiec, Marcin Usielski'
-__copyright__ = 'Copyright (C) 2019-2025, Nokia'
+__copyright__ = 'Copyright (C) 2019-2026, Nokia'
 __email__ = 'sylwester.golonka@nokia.com, jakub.kupiec@nokia.com, marcin.usielski@nokia.com'
 
 import logging
 from abc import ABCMeta
-from six import add_metaclass
 from moler.device.proxy_pc3 import ProxyPc3
 from moler.helpers import call_base_class_method_with_same_name, mark_to_call_base_class_method_with_same_name
 
 
 @call_base_class_method_with_same_name
-@add_metaclass(ABCMeta)
-class JuniperGeneric3(ProxyPc3):
+class JuniperGeneric3(ProxyPc3, metaclass=ABCMeta):
     """Junipergeneric device class."""
 
     cli = "CLI"

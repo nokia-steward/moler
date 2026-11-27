@@ -16,8 +16,6 @@ import re
 import threading
 import time
 
-import six
-
 from moler.device.textualdevice import TextualDevice
 from moler.device.unixlocal import UnixLocal
 from moler.events.shared.wait4 import Wait4
@@ -52,8 +50,7 @@ def want_local_unix_state(io_type=None, io_connection=None):
         return False
 
 
-@six.add_metaclass(abc.ABCMeta)
-class ProxyPc2(UnixLocal):
+class ProxyPc2(UnixLocal, metaclass=abc.ABCMeta):
 
     def __init__(self, sm_params, name=None, io_connection=None, io_type=None, variant=None, io_constructor_kwargs=None,
                  initial_state=None, lazy_cmds_events=False):

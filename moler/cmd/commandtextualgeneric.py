@@ -4,7 +4,7 @@ Generic class for all command with textual output.
 """
 
 __author__ = "Marcin Usielski, Michal Ernst"
-__copyright__ = "Copyright (C) 2018-2024, Nokia"
+__copyright__ = "Copyright (C) 2018-2026, Nokia"
 __email__ = "marcin.usielski@nokia.com, michal.ernst@nokia.com"
 
 import abc
@@ -13,8 +13,6 @@ import logging
 import re
 from threading import Lock
 from typing import Optional, Pattern, Tuple, Union, Sequence
-
-import six
 
 from moler.abstract_moler_connection import AbstractMolerConnection
 from moler.cmd import RegexHelper
@@ -26,8 +24,7 @@ from moler.runner import ConnectionObserverRunner
 r_default_prompt: str = r"^[^<]*[$%#>~]\s*$"  # When user provides no prompt
 
 
-@six.add_metaclass(abc.ABCMeta)
-class CommandTextualGeneric(Command):
+class CommandTextualGeneric(Command, metaclass=abc.ABCMeta):
     """Base class for textual commands."""
 
     _re_default_prompt = re.compile(r_default_prompt)  # When user provides no prompt
@@ -140,7 +137,7 @@ class CommandTextualGeneric(Command):
         :param break_exec_regex: String with regex, compiled regex object or None
         :return: None
         """
-        if isinstance(break_exec_regex, six.string_types):
+        if isinstance(break_exec_regex, str):
             break_exec_regex = re.compile(break_exec_regex)
         self._break_exec_regex = break_exec_regex
 
@@ -251,7 +248,7 @@ class CommandTextualGeneric(Command):
         """
         if not prompt:
             prompt = CommandTextualGeneric._re_default_prompt
-        if isinstance(prompt, six.string_types):
+        if isinstance(prompt, str):
             prompt = re.compile(prompt)
         return prompt
 

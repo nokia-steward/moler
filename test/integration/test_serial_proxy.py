@@ -5,7 +5,7 @@ Testing serial 2 stdin/stdout proxy
 """
 
 __author__ = 'Grzegorz Latuszek'
-__copyright__ = 'Copyright (C) 2020, Nokia'
+__copyright__ = 'Copyright (C) 2020-2026, Nokia'
 __email__ = 'grzegorz.latuszek@nokia.com'
 
 import importlib
@@ -13,7 +13,7 @@ import time
 import serial
 
 import pytest
-import mock
+from unittest import mock
 
 
 # -------------- IOSerial

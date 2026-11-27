@@ -1,5 +1,5 @@
 __author__ = 'Grzegorz Latuszek, Marcin Usielski'
-__copyright__ = 'Copyright (C) 2020-2024, Nokia'
+__copyright__ = 'Copyright (C) 2020-2026, Nokia'
 __email__ = 'grzegorz.latuszek@nokia.com, marcin.usielski@nokia.com'
 
 import pytest
@@ -178,7 +178,7 @@ def test_adb_remote_with_terminal_can_use_unix_local_states(loaded_adb_device_co
 
 @pytest.fixture
 def empty_connections_config():
-    import mock
+    from unittest import mock
     import moler.config.connections as conn_cfg
 
     default_variant = {"terminal": "threaded", "sshshell": "threaded"}
@@ -190,7 +190,7 @@ def empty_connections_config():
 
 @pytest.fixture()
 def empty_devices_config():
-    import mock
+    from unittest import mock
     import moler.config.devices as dev_cfg
 
     empty_named_devices = {}
@@ -203,7 +203,7 @@ def empty_devices_config():
 
 @pytest.fixture
 def empty_devfactory_config():
-    import mock
+    from unittest import mock
     from moler.device.device import DeviceFactory as dev_factory
 
     with mock.patch.object(dev_factory, "_devices", {}):
@@ -216,7 +216,7 @@ def empty_devfactory_config():
 
 @pytest.fixture
 def empty_moler_config(empty_connections_config, empty_devices_config, empty_devfactory_config):
-    import mock
+    from unittest import mock
     import moler.config as moler_cfg
 
     empty_loaded_config = ["NOT_LOADED_YET"]

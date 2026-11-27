@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 __author__ = 'Marcin Usielski'
-__copyright__ = 'Copyright (C) 2026, Nokia'
+__copyright__ = 'Copyright (C) 2026-2026, Nokia'
 __email__ = 'marcin.usielski@nokia.com'
 
 import subprocess
@@ -9,7 +9,6 @@ import subprocess
 import pytest
 import tempfile
 import os
-import six
 import getpass
 import platform
 from moler.device.unixlocal import UnixLocal
@@ -135,7 +134,7 @@ def test_cp_md5sum_cat_mv_rm_ls(unix_terminal):
     f = tempfile.NamedTemporaryFile(delete=False)
     file_content = "content"
     md5sum = "f75b8179e4bbe7e2b4a074dcef62de95"
-    data = six.b(file_content + "\n")
+    data = (file_content + "\n").encode("latin-1")
     f.write(data)
     src = f.name
     f.close()

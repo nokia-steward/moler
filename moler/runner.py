@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# Copyright (C) 2018-2020 Nokia
+# Copyright (C) 2018-2026 Nokia
 """
 Runner abstraction goal is to hide concurrency machinery used
 to make it exchangeable (threads, asyncio, twisted, curio)
@@ -18,8 +18,6 @@ from abc import abstractmethod, ABCMeta
 from concurrent.futures import ThreadPoolExecutor, wait
 from functools import partial
 
-from six import add_metaclass
-
 from moler.exceptions import CommandTimeout
 from moler.exceptions import ConnectionObserverTimeout
 from moler.exceptions import MolerException
@@ -28,8 +26,7 @@ from moler.util.loghelper import log_into_logger
 from moler.util import tracked_thread
 
 
-@add_metaclass(ABCMeta)
-class ConnectionObserverRunner:
+class ConnectionObserverRunner(metaclass=ABCMeta):
     @abstractmethod
     def shutdown(self):
         """Cleanup used resources."""
@@ -462,9 +459,7 @@ class ThreadPoolExecutorRunner(ConnectionObserverRunner):
         """
         while not connection_observer_future.done():
             yield None
-        # return result_for_runners(connection_observer)  # May raise too.   # Python > 3.3
-        res = result_for_runners(connection_observer)
-        raise StopIteration(res)  # Python 2 compatibility
+        return result_for_runners(connection_observer)  # May raise too.
 
     def _start_feeding(self, connection_observer, observer_lock):
         """

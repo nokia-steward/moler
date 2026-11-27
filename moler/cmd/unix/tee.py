@@ -4,12 +4,11 @@ Tee command module.
 """
 
 __author__ = 'Marcin Usielski, Michal Ernst'
-__copyright__ = 'Copyright (C) 2019, Nokia'
+__copyright__ = 'Copyright (C) 2019-2026, Nokia'
 __email__ = 'marcin.usielski@nokia.com, michal.ernst@nokia.com'
 
 from moler.cmd.unix.genericunix import GenericUnixCommand
 from moler.helpers import copy_list
-import six
 
 
 class Tee(GenericUnixCommand):
@@ -30,7 +29,7 @@ class Tee(GenericUnixCommand):
         super(Tee, self).__init__(connection=connection, prompt=prompt, newline_chars=newline_chars, runner=runner)
         self.ret_required = False
         self.path = path
-        if isinstance(content, six.string_types):
+        if isinstance(content, str):
             self._content = [content]
         else:
             self._content = copy_list(src=content)  # copy of list of content to modify

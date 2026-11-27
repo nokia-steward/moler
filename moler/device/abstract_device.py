@@ -11,13 +11,11 @@ __email__ = "marcin.usielski@nokia.com"
 import abc
 import logging
 
-import six
 
 _logger = logging.getLogger(__name__)
 
 
-@six.add_metaclass(abc.ABCMeta)
-class AbstractDevice:
+class AbstractDevice(metaclass=abc.ABCMeta):
     def __init__(self):
         super(AbstractDevice, self).__init__()
         self._remove_callbacks = []

@@ -877,7 +877,7 @@ def device_factory(clear_all_cfg):
 
 @pytest.fixture
 def clear_all_cfg():
-    import mock
+    from unittest import mock
     import moler.config as moler_cfg
     import moler.config.connections as conn_cfg
     import moler.config.devices as dev_cfg

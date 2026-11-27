@@ -12,12 +12,11 @@ Additionally:
 """
 
 __author__ = 'Grzegorz Latuszek, Marcin Usielski, Michal Ernst'
-__copyright__ = 'Copyright (C) 2018-2024, Nokia'
+__copyright__ = 'Copyright (C) 2018-2026, Nokia'
 __email__ = 'grzegorz.latuszek@nokia.com, marcin.usielski@nokia.com, michal.ernst@nokia.com'
 
 from abc import ABCMeta
 
-from six import add_metaclass
 from typing import Optional
 
 from moler.connection_observer import ConnectionObserver
@@ -27,9 +26,8 @@ from moler.abstract_moler_connection import AbstractMolerConnection
 from moler.runner import ConnectionObserverRunner
 
 
-@add_metaclass(ABCMeta)
 # pylint: disable=W0223
-class Command(ConnectionObserver):
+class Command(ConnectionObserver, metaclass=ABCMeta):
     def __init__(self, connection: Optional[AbstractMolerConnection] = None, runner: Optional[ConnectionObserverRunner] = None):
         """
         Create instance of Command class

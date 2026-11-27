@@ -8,19 +8,17 @@ google for: 3gpp specification 27.007
 """
 
 __author__ = 'Grzegorz Latuszek'
-__copyright__ = 'Copyright (C) 2020, Nokia'
+__copyright__ = 'Copyright (C) 2020-2026, Nokia'
 __email__ = 'grzegorz.latuszek@nokia.com'
 
 import re
 import abc
-import six
 from moler.cmd.commandtextualgeneric import CommandTextualGeneric
 from moler.exceptions import CommandFailure
 from moler.exceptions import ParsingDone
 
 
-@six.add_metaclass(abc.ABCMeta)
-class GenericAtCommand(CommandTextualGeneric):
+class GenericAtCommand(CommandTextualGeneric, metaclass=abc.ABCMeta):
     _re_default_at_prompt = re.compile(r'^\s*(OK|NO CARRIER|ERROR|\+CM[ES]\s+ERROR:\s*\S.+)\s*$')  # When user provides no prompt
 
     def __init__(self, connection, operation="execute", prompt=None, newline_chars=None, runner=None):

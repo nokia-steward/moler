@@ -2,7 +2,6 @@
 pycodestyle
 coverage
 pytest
-mock
 pytest-asyncio
 flake8
 pylint

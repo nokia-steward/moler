@@ -4,7 +4,7 @@ threaded.network_down_multi-detectors.py
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 A fully-functional connection-observer using socket & threading.
-Works on Python 2.7 as well as on 3.6
+Works on Python 3.10+
 
 This example demonstrates multiple connection observers working
 on multiple connections.
@@ -17,7 +17,7 @@ Shows following concepts:
 """
 
 __author__ = 'Grzegorz Latuszek'
-__copyright__ = 'Copyright (C) 2018, Nokia'
+__copyright__ = 'Copyright (C) 2018-2026, Nokia'
 __email__ = 'grzegorz.latuszek@nokia.com'
 
 import logging

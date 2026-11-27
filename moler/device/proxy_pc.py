@@ -8,15 +8,13 @@ Moler's device has 2 main responsibilities:
 __author__ = 'Marcin Usielski'
 __copyright__ = 'Copyright (C) 2024-2026, Nokia'
 __email__ = 'marcin.usielski@nokia.com'
-import six
 import abc
 
 from moler.device.unixlocal import UnixLocal
 from moler.helpers import remove_state_from_sm, remove_state_hops_from_sm
 
 
-@six.add_metaclass(abc.ABCMeta)
-class ProxyPc(UnixLocal):
+class ProxyPc(UnixLocal, metaclass=abc.ABCMeta):
     proxy_pc = "PROXY_PC"
 
     def __init__(self, sm_params, name=None, io_connection=None, io_type=None, variant=None, io_constructor_kwargs=None,

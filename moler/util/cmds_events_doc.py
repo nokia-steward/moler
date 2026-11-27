@@ -3,7 +3,6 @@
 Perform command autotest for selected command(s).
 """
 
-from __future__ import print_function
 
 __author__ = 'Grzegorz Latuszek', 'Michal Ernst', 'Michal Plichta, Marcin Usielski'
 __copyright__ = 'Copyright (C) 2018-2026, Nokia'

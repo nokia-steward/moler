@@ -1,6 +1,5 @@
 ptyprocess; platform_system != "Windows"
 pyyaml >= 5.1
-six
 transitions
 apscheduler
 psutil
@@ -8,4 +7,3 @@ python-dateutil
 pyserial
 cryptography
 paramiko
-importlib-metadata

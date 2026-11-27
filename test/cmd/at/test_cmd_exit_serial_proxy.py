@@ -4,11 +4,11 @@ Testing ExitSerialProxy command.
 """
 
 __author__ = 'Grzegorz Latuszek'
-__copyright__ = 'Copyright (C) 2020, Nokia'
+__copyright__ = 'Copyright (C) 2020-2026, Nokia'
 __email__ = 'grzegorz.latuszek@nokia.com'
 
 import pytest
-import mock
+from unittest import mock
 
 
 # -----------------------------------------------------

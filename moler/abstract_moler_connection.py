@@ -13,11 +13,10 @@ Connection responsibilities:
 """
 
 __author__ = 'Grzegorz Latuszek, Marcin Usielski, Michal Ernst'
-__copyright__ = 'Copyright (C) 2018-2022, Nokia'
+__copyright__ = 'Copyright (C) 2018-2026, Nokia'
 __email__ = 'grzegorz.latuszek@nokia.com, marcin.usielski@nokia.com, michal.ernst@nokia.com'
 
 import logging
-import six
 
 from moler.config.loggers import RAW_DATA, TRACE
 from moler.exceptions import WrongUsage
@@ -135,7 +134,7 @@ class AbstractMolerConnection:
 
     @staticmethod
     def _strip_data(data):
-        return data.strip() if isinstance(data, six.string_types) else data
+        return data.strip() if isinstance(data, str) else data
 
     # TODO: should timeout be property of IO? We timeout whole connection-observer.
     # pylint: disable-next=unused-argument

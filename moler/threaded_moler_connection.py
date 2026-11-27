@@ -21,8 +21,6 @@ import logging
 import weakref
 from threading import Lock
 
-import six
-
 from moler.abstract_moler_connection import (
     AbstractMolerConnection,
     identity_transformation,
@@ -226,7 +224,7 @@ class ThreadedMolerConnection(AbstractMolerConnection):
         Observer key is pair: (self-id, function-id)
         """
         try:
-            self_or_none = six.get_method_self(observer)
+            self_or_none = observer.__self__
             self_id = instance_id(self_or_none)
             self_or_none = weakref.proxy(self_or_none)
         except AttributeError:
@@ -234,7 +232,7 @@ class ThreadedMolerConnection(AbstractMolerConnection):
             self_or_none = None
 
         try:
-            func = six.get_method_function(observer)
+            func = observer.__func__
         except AttributeError:
             func = observer
         function_id = instance_id(func)

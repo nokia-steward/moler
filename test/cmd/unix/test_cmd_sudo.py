@@ -4,7 +4,7 @@ Testing of sudo command.
 """
 
 __author__ = 'Marcin Usielski'
-__copyright__ = 'Copyright (C) 2018-2025, Nokia'
+__copyright__ = 'Copyright (C) 2018-2026, Nokia'
 __email__ = 'marcin.usielski@nokia.com'
 
 from moler.cmd.unix.sudo import Sudo
@@ -15,7 +15,7 @@ from moler.cmd.unix.whoami import Whoami
 from moler.exceptions import CommandTimeout
 from moler.exceptions import CommandFailure
 import pytest
-import mock
+from unittest import mock
 import time
 import datetime
 

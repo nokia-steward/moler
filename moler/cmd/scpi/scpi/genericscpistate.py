@@ -3,17 +3,15 @@
 SCPI generic module for commands in state SCPI.
 """
 
-import six
 import abc
 from moler.cmd.scpi.genricscpi import GenericScpi as DefaultGeneric
 
 __author__ = 'Marcin Usielski'
-__copyright__ = 'Copyright (C) 2019, Nokia'
+__copyright__ = 'Copyright (C) 2019-2026, Nokia'
 __email__ = 'marcin.usielski@nokia.com'
 
 
-@six.add_metaclass(abc.ABCMeta)
-class GenericScpiState(DefaultGeneric):
+class GenericScpiState(DefaultGeneric, metaclass=abc.ABCMeta):
     def __init__(self, connection, prompt=None, newline_chars=None, runner=None):
         """
         Base class for Scpi commands in state SCPI.

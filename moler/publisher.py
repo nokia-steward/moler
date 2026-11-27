@@ -11,13 +11,11 @@ This is required since:
 """
 
 __author__ = "Grzegorz Latuszek"
-__copyright__ = "Copyright (C) 2020, Nokia"
+__copyright__ = "Copyright (C) 2020-2026, Nokia"
 __email__ = "grzegorz.latuszek@nokia.com"
 
 import weakref
 from threading import Lock
-
-import six
 
 from moler.helpers import instance_id
 
@@ -133,7 +131,7 @@ class Publisher:
         Observer key is pair: (self-id, function-id)
         """
         try:
-            self_or_none = six.get_method_self(subscriber)
+            self_or_none = subscriber.__self__
             self_id = instance_id(self_or_none)
             self_or_none = weakref.proxy(self_or_none)
         except AttributeError:
@@ -141,7 +139,7 @@ class Publisher:
             self_or_none = None
 
         try:
-            func = six.get_method_function(subscriber)
+            func = subscriber.__func__
         except AttributeError:
             func = subscriber
         function_id = instance_id(func)
