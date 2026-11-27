@@ -503,7 +503,7 @@ Awaiting completion of future is done by entities external to future-object
 
 | API               | concurrent.futures<br>awaiting by module level functions | asyncio<br>awaiting by module-lvl functions or ev-loop |
 | ----------------- | ------------------------------------------ | -------------------------------------------- |
-| await completion  |  done, not_done = wait(futures, timeout) -> futures | done, not_done = await wait(futures)<br>results = await gather(futures)<br>result = await future<br>result = yield from future<br>result = await coroutine<br>result = yield from coroutine<br>result = yield from wait_for(future, timeout)<br>loop.run_until_complete(future) -> blocking run |
+| await completion  |  done, not_done = wait(futures, timeout) -> futures | done, not_done = await wait(futures)<br>results = await gather(futures)<br>result = await future<br>result = await coroutine<br>result = await wait_for(future, timeout)<br>loop.run_until_complete(future) -> blocking run |
 | process as they<br>complete | for done in as_completed(futures, timeout) -> futures | for done in as_completed(futures, timeout) -> futures |
 
 ## Fundamental difference of command
@@ -540,8 +540,8 @@ command_as_future = command.start()
 **asyncio:** variant looks like:
 ``` python
 result = await future
-done_futures, pending = yield from asyncio.wait(futures)
-result = yield from asyncio.wait_for(future, 60.0)
+done_futures, pending = await asyncio.wait(futures)
+result = await asyncio.wait_for(future, 60.0)
 ```
 and **concurrent.futures** variant looks like:
 ``` python

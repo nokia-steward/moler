@@ -19,6 +19,7 @@ import logging
 import threading
 import time
 import sys
+import warnings
 import psutil
 import functools
 import platform
@@ -170,13 +171,13 @@ def handle_cancelled_feeder(connection_observer, observer_lock, subscribed_data_
 
 
 def cancel_remaining_feeders(loop, logger_name="moler.runner.asyncio", in_shutdown=False):
-    remaining = [task for task in asyncio.Task.all_tasks(loop=loop) if (not task.done()) and (is_feeder(task))]
+    remaining = [task for task in asyncio.all_tasks(loop) if (not task.done()) and (is_feeder(task))]
     if remaining:
         logger = logging.getLogger(logger_name)
         loop_id = instance_id(loop)
         log_level = logging.WARNING if in_shutdown else logging.DEBUG
         logger.log(level=log_level, msg=f"cancelling all remaining feeders of loop {loop_id}:")
-        remaining_tasks = asyncio.gather(*remaining, loop=loop, return_exceptions=True)
+        remaining_tasks = asyncio.gather(*remaining, return_exceptions=True)  # loop is taken from the tasks
         for feeder in remaining:
             logger.log(level=log_level, msg=f"  remaining {instance_id(feeder)}:{feeder}")
         remaining_tasks.cancel()
@@ -217,7 +218,7 @@ class AsyncioRunner(ConnectionObserverRunner):
                     sys.stderr.write(f"{msg}\n")
                     self.logger.debug(msg)
                     cancel_remaining_feeders(owned_loop, logger_name=self.logger.name, in_shutdown=True)
-                    remaining = [task for task in asyncio.Task.all_tasks(loop=owned_loop) if not task.done()]
+                    remaining = [task for task in asyncio.all_tasks(owned_loop) if not task.done()]
                     if remaining:
                         msg = "AsyncioRunner owned loop has still running task"
                         for still_running_task in remaining:
@@ -633,11 +634,17 @@ class AsyncioRunner(ConnectionObserverRunner):
 
 
 class AsyncioEventThreadsafe(asyncio.Event):
+    def __init__(self, loop):
+        # asyncio.Event(loop=...) was removed in Python 3.10 - Event binds to running loop on first use,
+        # so we need to remember loop owning this event to allow set()/clear() from other threads.
+        super().__init__()
+        self._owner_loop = loop
+
     def set(self):
-        self._loop.call_soon_threadsafe(super().set)
+        self._owner_loop.call_soon_threadsafe(super().set)
 
     def clear(self):
-        self._loop.call_soon_threadsafe(super().clear)
+        self._owner_loop.call_soon_threadsafe(super().clear)
 
 
 class AsyncioInThreadRunner(AsyncioRunner):
@@ -799,7 +806,7 @@ def cleanup_remaining_tasks(loop, logger):
     # https://medium.com/python-pandemonium/asyncio-coroutine-patterns-beyond-await-a6121486656f
     # Handle shutdown gracefully by waiting for all tasks to be cancelled
 
-    not_done_tasks = [task for task in asyncio.Task.all_tasks(loop=loop) if not task.done()]
+    not_done_tasks = [task for task in asyncio.all_tasks(loop) if not task.done()]
     if not_done_tasks:
         logger.info("cancelling all remaining tasks")
         # NOTE: following code cancels all tasks - possibly not ours as well
@@ -809,7 +816,7 @@ def cleanup_remaining_tasks(loop, logger):
 
 def cleanup_selected_tasks(tasks2cancel, loop, logger):
     logger.debug(f"tasks to cancel: {tasks2cancel}")
-    remaining_tasks = asyncio.gather(*tasks2cancel, loop=loop, return_exceptions=True)
+    remaining_tasks = asyncio.gather(*tasks2cancel, return_exceptions=True)  # loop is taken from the tasks
     remaining_tasks.add_done_callback(lambda t: loop.stop())
     remaining_tasks.cancel()
 
@@ -834,7 +841,12 @@ class AsyncioLoopThread(TillDoneThread):
         #   Python interpreter can process signals only in main thread.
         # answer by: https://stackoverflow.com/users/3454879/andrew-svetlov
         #
-        asyncio.get_child_watcher().attach_loop(self.ev_loop)
+        # asyncio.get_child_watcher() is deprecated since Python 3.12 and removed in 3.14.
+        # Since 3.8 default watcher (ThreadedChildWatcher/PidfdChildWatcher) doesn't need attached loop.
+        if hasattr(asyncio, "get_child_watcher"):
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", DeprecationWarning)
+                asyncio.get_child_watcher().attach_loop(self.ev_loop)
 
         self.ev_loop.set_debug(enabled=True)
 
@@ -876,7 +888,7 @@ class AsyncioLoopThread(TillDoneThread):
         self.logger.info("finished asyncio-loop-thrd ...")
         self.logger.info("closing events loop ...")
         sys.stderr.write(f"CLOSING EV_LOOP of AsyncioLoopThread {self.ev_loop!r}\n")
-        for still_running_tasks in asyncio.Task.all_tasks(loop=self.ev_loop):
+        for still_running_tasks in asyncio.all_tasks(self.ev_loop):
             sys.stderr.write(f"AsyncioLoopThread has still running task: {still_running_tasks!r}\n")
         self.ev_loop.close()
         self.logger.info("... asyncio loop closed")

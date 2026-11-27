@@ -228,7 +228,7 @@ class ConnectionObserver(metaclass=ABCMeta):
 
     def __iter__(self):
         """
-        Implement iterator protocol to support 'yield from' in @asyncio.coroutine
+        Implement iterator protocol (used by __await__ to support 'await' on connection observer)
         :return:
         """
         if self._future is None:

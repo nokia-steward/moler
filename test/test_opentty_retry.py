@@ -2,7 +2,7 @@
 """Tests for pty.openpty retry when the system is out of pty devices."""
 
 __author__ = "Marcin Usielski"
-__copyright__ = "Copyright (C) 2026-2026, Nokia"
+__copyright__ = "Copyright (C) 2026, Nokia"
 __email__ = "marcin.usielski@nokia.com"
 
 import sys

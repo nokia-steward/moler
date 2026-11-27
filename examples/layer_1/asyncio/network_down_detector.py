@@ -91,7 +91,8 @@ if __name__ == '__main__':
         datefmt='%H:%M:%S',
         stream=sys.stderr,
     )
-    event_loop = asyncio.get_event_loop()
+    event_loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(event_loop)
     server_address = ('127.0.0.1', 5678)
     servers = start_ping_servers([(server_address, '10.0.2.15')])
     try:

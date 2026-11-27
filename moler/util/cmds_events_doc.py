@@ -9,7 +9,6 @@ __copyright__ = 'Copyright (C) 2018-2026, Nokia'
 __email__ = 'grzegorz.latuszek@nokia.com', 'michal.ernst@nokia.com', 'michal.plichta@nokia.com,' \
                                                                      ' marcin.usielski@nokia.com'
 
-import collections
 import time
 from argparse import ArgumentParser
 from datetime import datetime
@@ -185,21 +184,6 @@ def _create_command(moler_class, moler_connection, cmd_kwargs):
     except Exception as err:
         error_msg = f"Can't create command instance via {constructor_str} : {str(err)}"
         raise Exception(error_msg) from err
-
-
-def _reformat_str_to_unicode(cmd_result):
-    if (isinstance(cmd_result, dict)):
-        # pylint: disable-next=unused-variable
-        for key, value in cmd_result.items():
-            if (key in cmd_result and isinstance(cmd_result[key], dict) and isinstance(cmd_result[key],
-                                                                                       collections.Mapping)):
-                _reformat_str_to_unicode(cmd_result[key])
-            else:
-                if isinstance(cmd_result[key], str):
-                    cmd_result[key] = cmd_result[key].decode('utf-8')
-                    print(cmd_result[key])
-
-    return cmd_result
 
 
 def _run_command_parsing_test(moler_cmd, creation_str, buffer_io, cmd_output, cmd_result, variant, base_class,

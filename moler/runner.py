@@ -9,6 +9,7 @@ __author__ = 'Grzegorz Latuszek, Marcin Usielski, Michal Ernst'
 __copyright__ = 'Copyright (C) 2018-2026, Nokia'
 __email__ = 'grzegorz.latuszek@nokia.com, marcin.usielski@nokia.com, michal.ernst@nokia.com'
 
+import atexit
 import concurrent.futures
 import logging
 import threading
@@ -214,13 +215,7 @@ class ThreadPoolExecutorRunner(ConnectionObserverRunner):
         self._register_autoshutdown()
         if executor is None:
             max_workers = 1000  # max 1000 threads in pool
-            try:  # concurrent.futures  v.3.2.0 introduced prefix we like :-)
-                self.executor = ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix='ThrdPoolRunner')
-            except TypeError as exc:
-                if ('unexpected' in str(exc)) and ('thread_name_prefix' in str(exc)):
-                    self.executor = ThreadPoolExecutor(max_workers=max_workers)
-                else:
-                    raise
+            self.executor = ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix='ThrdPoolRunner')
             self.logger.debug(f"created own executor {self.executor!r}")
             self._i_own_executor = True
         else:
@@ -235,8 +230,11 @@ class ThreadPoolExecutorRunner(ConnectionObserverRunner):
         # compatibility with subinterpreters, which no longer support daemon threads.
         # See bpo-39812 for context.
 
-        # noinspection PyUnresolvedReferences
-        threading._register_atexit(self.shutdown)  # pylint: disable=protected-access
+        register_atexit = getattr(threading, "_register_atexit", None)  # private CPython API
+        if register_atexit is not None:
+            register_atexit(self.shutdown)
+        else:  # other interpreter / future Python without private hook - fall back to public API
+            atexit.register(self.shutdown)
 
     def is_in_shutdown(self):
         """

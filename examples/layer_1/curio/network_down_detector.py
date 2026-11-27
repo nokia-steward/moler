@@ -26,7 +26,13 @@ import sys
 import os
 import time
 
-import curio
+try:
+    import curio
+except (ImportError, AttributeError) as curio_error:
+    # curio is not installed or not maintained for this Python version
+    # (curio 1.6 fails on import under Python 3.13+) - don't fail examples runner
+    print(f"SKIPPED: curio example requires working 'curio' package ({curio_error!r})")
+    sys.exit(0)
 from moler.threaded_moler_connection import ThreadedMolerConnection
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))  # allow finding modules in examples/

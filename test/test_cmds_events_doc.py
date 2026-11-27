@@ -211,8 +211,11 @@ def test_create_command_raise_exception_when_object_takes_no_params(fake_cmd):
     with raises(Exception) as exc:
         _create_command(fake_cmd, _buffer_connection().moler_connection, {})
 
-    assert "via FakeCommand() : object() takes no parameters" or "via FakeCommand() : this constructor takes no arguments" in str(
-        exc.value)
+    error_msg = str(exc.value)
+    assert "Can't create command instance via FakeCommand()" in error_msg
+    # wording of TypeError differs between Python versions
+    assert any(reason in error_msg for reason in ("takes no parameters",
+                                                  "takes no arguments"))
 
 
 def test_create_command_success(nice_cmd):
