@@ -75,14 +75,7 @@ def check_system_resources_limit(connection_observer, observer_lock, logger):
             connection_observer.set_exception(limit_exception)
         # We need to return future informing "it's impossible to create new event loop"
         # However, it can't be asyncio.Future() since it requires event loop ;-)
-        # We would get something like:
-        #
-        #    impossible_future = asyncio.Future()
-        #  File "/opt/ute/python3/lib/python3.6/asyncio/events.py", line 676, in get_event_loop
-        #    return get_event_loop_policy().get_event_loop()
-        #  File "/opt/ute/python3/lib/python3.6/asyncio/events.py", line 584, in get_event_loop
-        #    % threading.current_thread().name)
-        # RuntimeError: There is no current event loop in thread 'Thread-5090'.
+        # (asyncio.Future() would raise RuntimeError: There is no current event loop in thread '<thread name>')
         #
         # So, we use concurrent.futures.Future - it has almost same API (duck typing for runner.wait_for() below)
         impossible_future = concurrent.futures.Future()
@@ -94,7 +87,7 @@ def check_system_resources_limit(connection_observer, observer_lock, logger):
 # class LoudEventLoop(asyncio.unix_events.SelectorEventLoop):
 class LoudEventLoop(asyncio.SelectorEventLoop):
     def __init__(self, *args):
-        super(LoudEventLoop, self).__init__(*args)
+        super().__init__(*args)
 
     def stop(self):
         logger = logging.getLogger('moler')
@@ -103,7 +96,7 @@ class LoudEventLoop(asyncio.SelectorEventLoop):
         debug_into_logger(logger, msg=msg, levels_to_go_up=1)
         debug_into_logger(logger, msg=msg, levels_to_go_up=2)
         debug_into_logger(logger, msg=msg, levels_to_go_up=3)
-        super(LoudEventLoop, self).stop()
+        super().stop()
 
 
 def thread_secure_get_event_loop(logger_name="moler.runner.asyncio"):
@@ -118,17 +111,26 @@ def thread_secure_get_event_loop(logger_name="moler.runner.asyncio"):
     """
     new_loop = False
     try:
-        loop = asyncio.get_event_loop()
-    except RuntimeError as err:
-        if "no current event loop in thread" in str(err):
-            loop = asyncio.new_event_loop()
-            loop_id = instance_id(loop)
-            logger = logging.getLogger(logger_name)
-            logger.debug(f"created new event loop {loop_id}:{loop}")
-            asyncio.set_event_loop(loop)
-            new_loop = True
-        else:
-            raise
+        loop = asyncio.get_running_loop()  # we are called from inside of running loop - no need for policy lookup
+    except RuntimeError:
+        loop = None
+    if loop is None:
+        try:
+            with warnings.catch_warnings():
+                # Python 3.12-3.13 emit DeprecationWarning when there is no current loop (and create one),
+                # Python 3.14+ raises RuntimeError instead. We handle both the same way below.
+                warnings.simplefilter("ignore", DeprecationWarning)
+                loop = asyncio.get_event_loop()
+        except RuntimeError as err:
+            if "no current event loop" in str(err):
+                loop = asyncio.new_event_loop()
+                loop_id = instance_id(loop)
+                logger = logging.getLogger(logger_name)
+                logger.debug(f"created new event loop {loop_id}:{loop}")
+                asyncio.set_event_loop(loop)
+                new_loop = True
+            else:
+                raise
 
     loop.set_debug(enabled=True)
     return loop, new_loop
@@ -650,7 +652,7 @@ class AsyncioEventThreadsafe(asyncio.Event):
 class AsyncioInThreadRunner(AsyncioRunner):
     def __init__(self):
         """Create instance of AsyncioInThreadRunner class"""
-        super(AsyncioInThreadRunner, self).__init__(logger_name='moler.runner.asyncio-in-thrd')
+        super().__init__(logger_name='moler.runner.asyncio-in-thrd')
         # AsyncioLoopThread must be created from MainThread since it adds signal handlers
         # (AsyncioLoopThread needs unix watchers embeding signal handles used to stop subprocesses)
         get_asyncio_loop_thread()
@@ -855,7 +857,7 @@ class AsyncioLoopThread(TillDoneThread):
         self.ev_loop_done.clear()
         self.ev_loop_started = threading.Event()
 
-        super(AsyncioLoopThread, self).__init__(target=self._start_loop,
+        super().__init__(target=self._start_loop,
                                                 done_event=self.ev_loop_done,
                                                 kwargs={'loop': self.ev_loop,
                                                         'loop_started': self.ev_loop_started,
@@ -870,7 +872,7 @@ class AsyncioLoopThread(TillDoneThread):
         We wan't this method to not return before it ensures
         that thread and it's enclosed loop are really running.
         """
-        super(AsyncioLoopThread, self).start()
+        super().start()
         # await loop thread to be really started
         start_timeout = 0.5
         if not self.ev_loop_started.wait(timeout=start_timeout):
@@ -884,7 +886,7 @@ class AsyncioLoopThread(TillDoneThread):
         Closing asyncio loop must be done from MainThread
         to allow for removing signal handlers
         """
-        super(AsyncioLoopThread, self).join(timeout=timeout)
+        super().join(timeout=timeout)
         self.logger.info("finished asyncio-loop-thrd ...")
         self.logger.info("closing events loop ...")
         sys.stderr.write(f"CLOSING EV_LOOP of AsyncioLoopThread {self.ev_loop!r}\n")

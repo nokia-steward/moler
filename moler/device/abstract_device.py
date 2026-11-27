@@ -17,7 +17,7 @@ _logger = logging.getLogger(__name__)
 
 class AbstractDevice(metaclass=abc.ABCMeta):
     def __init__(self):
-        super(AbstractDevice, self).__init__()
+        super().__init__()
         self._remove_callbacks = []
 
     @property

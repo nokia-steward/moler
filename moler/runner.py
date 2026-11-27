@@ -232,9 +232,17 @@ class ThreadPoolExecutorRunner(ConnectionObserverRunner):
 
         register_atexit = getattr(threading, "_register_atexit", None)  # private CPython API
         if register_atexit is not None:
-            register_atexit(self.shutdown)
-        else:  # other interpreter / future Python without private hook - fall back to public API
-            atexit.register(self.shutdown)
+            try:
+                register_atexit(self.shutdown)
+            except RuntimeError as err:  # "can't register atexit after shutdown" - interpreter is finalizing
+                self.logger.warning(f"can't register autoshutdown of {self}: {err!r}")
+            return
+        # Other interpreter / future Python without private hook - fall back to public API.
+        # Limitation: atexit callbacks are called AFTER non-daemon threads are joined, so (unlike above)
+        # this shutdown can't unblock worker threads that join would wait for.
+        self.logger.warning("threading._register_atexit is not available; autoshutdown registered via atexit "
+                            "- worker threads still running at interpreter exit may block it")
+        atexit.register(self.shutdown)
 
     def is_in_shutdown(self):
         """

@@ -29,8 +29,9 @@ import time
 try:
     import curio
 except (ImportError, AttributeError) as curio_error:
-    # curio is not installed or not maintained for this Python version
-    # (curio 1.6 fails on import under Python 3.13+) - don't fail examples runner
+    if sys.version_info < (3, 13):
+        raise  # curio is expected to work here - don't hide real problems
+    # curio 1.6 fails on import under Python 3.13+ - don't fail examples runner
     print(f"SKIPPED: curio example requires working 'curio' package ({curio_error!r})")
     sys.exit(0)
 from moler.threaded_moler_connection import ThreadedMolerConnection
