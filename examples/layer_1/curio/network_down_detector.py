@@ -3,7 +3,7 @@
 curio.network_down_detector.py
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-A fully-functional connection-observer using curio. Requires Python 3.6+.
+A fully-functional connection-observer using curio. Requires Python 3.10+.
 
 This example demonstrates basic concept of connection observer - entity
 that is fully responsible for:
@@ -18,7 +18,7 @@ Another words - low level manual combining of all the pieces.
 """
 
 __author__ = 'Grzegorz Latuszek'
-__copyright__ = 'Copyright (C) 2018, Nokia'
+__copyright__ = 'Copyright (C) 2018-2026, Nokia'
 __email__ = 'grzegorz.latuszek@nokia.com'
 
 import logging
@@ -26,7 +26,14 @@ import sys
 import os
 import time
 
-import curio
+try:
+    import curio
+except (ImportError, AttributeError) as curio_error:
+    if sys.version_info < (3, 13):
+        raise  # curio is expected to work here - don't hide real problems
+    # curio 1.6 fails on import under Python 3.13+ - don't fail examples runner
+    print(f"SKIPPED: curio example requires working 'curio' package ({curio_error!r})")
+    sys.exit(0)
 from moler.threaded_moler_connection import ThreadedMolerConnection
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))  # allow finding modules in examples/

@@ -14,7 +14,7 @@ __email__ = 'grzegorz.latuszek@nokia.com, marcin.usielski@nokia.com'
 import time
 import importlib
 import pytest
-import mock
+from unittest import mock
 import threading
 import platform
 

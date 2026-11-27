@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# Copyright (C) 2018-2020 Nokia
+# Copyright (C) 2018-2026 Nokia
 """
 Runner abstraction goal is to hide concurrency machinery used
 to make it exchangeable (threads, asyncio, twisted, curio)
@@ -12,15 +12,12 @@ __email__ = 'grzegorz.latuszek@nokia.com, marcin.usielski@nokia.com, michal.erns
 import atexit
 import concurrent.futures
 import logging
-import sys
 import threading
 import time
 import traceback
 from abc import abstractmethod, ABCMeta
 from concurrent.futures import ThreadPoolExecutor, wait
 from functools import partial
-
-from six import add_metaclass
 
 from moler.exceptions import CommandTimeout
 from moler.exceptions import ConnectionObserverTimeout
@@ -30,8 +27,7 @@ from moler.util.loghelper import log_into_logger
 from moler.util import tracked_thread
 
 
-@add_metaclass(ABCMeta)
-class ConnectionObserverRunner:
+class ConnectionObserverRunner(metaclass=ABCMeta):
     @abstractmethod
     def shutdown(self):
         """Cleanup used resources."""
@@ -219,36 +215,34 @@ class ThreadPoolExecutorRunner(ConnectionObserverRunner):
         self._register_autoshutdown()
         if executor is None:
             max_workers = 1000  # max 1000 threads in pool
-            try:  # concurrent.futures  v.3.2.0 introduced prefix we like :-)
-                self.executor = ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix='ThrdPoolRunner')
-            except TypeError as exc:
-                if ('unexpected' in str(exc)) and ('thread_name_prefix' in str(exc)):
-                    self.executor = ThreadPoolExecutor(max_workers=max_workers)
-                else:
-                    raise
+            self.executor = ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix='ThrdPoolRunner')
             self.logger.debug(f"created own executor {self.executor!r}")
             self._i_own_executor = True
         else:
             self.logger.debug(f"reusing provided executor {self.executor!r}")
 
     def _register_autoshutdown(self):
-        if sys.version_info < (3, 9):
-            atexit.register(self.shutdown)
-            # atexit registered callback is called after python stops all non-daemon threads
+        # ThreadPoolExecutor creates non-daemon threads
+        # we use same "private" machinery of threading as concurrent.futures
 
-            # Python 2.7, 3.6, 3.7, 3.8 - ThreadPoolExecutor creates daemon threads
-            # so, we can reach atexit callback
-        else:
-            # Python 3.9 - ThreadPoolExecutor creates non-daemon threads
-            # we use same "private" machinery of threading as concurrent.futures of Python 3.9
+        # Register for `_python_exit()` to be called just before joining all
+        # non-daemon threads. This is used instead of `atexit.register()` for
+        # compatibility with subinterpreters, which no longer support daemon threads.
+        # See bpo-39812 for context.
 
-            # Register for `_python_exit()` to be called just before joining all
-            # non-daemon threads. This is used instead of `atexit.register()` for
-            # compatibility with subinterpreters, which no longer support daemon threads.
-            # See bpo-39812 for context.
-
-            # noinspection PyUnresolvedReferences
-            threading._register_atexit(self.shutdown)  # pylint: disable=protected-access
+        register_atexit = getattr(threading, "_register_atexit", None)  # private CPython API
+        if register_atexit is not None:
+            try:
+                register_atexit(self.shutdown)
+            except RuntimeError as err:  # "can't register atexit after shutdown" - interpreter is finalizing
+                self.logger.warning(f"can't register autoshutdown of {self}: {err!r}")
+            return
+        # Other interpreter / future Python without private hook - fall back to public API.
+        # Limitation: atexit callbacks are called AFTER non-daemon threads are joined, so (unlike above)
+        # this shutdown can't unblock worker threads that join would wait for.
+        self.logger.warning("threading._register_atexit is not available; autoshutdown registered via atexit "
+                            "- worker threads still running at interpreter exit may block it")
+        atexit.register(self.shutdown)
 
     def is_in_shutdown(self):
         """
@@ -471,9 +465,7 @@ class ThreadPoolExecutorRunner(ConnectionObserverRunner):
         """
         while not connection_observer_future.done():
             yield None
-        # return result_for_runners(connection_observer)  # May raise too.   # Python > 3.3
-        res = result_for_runners(connection_observer)
-        raise StopIteration(res)  # Python 2 compatibility
+        return result_for_runners(connection_observer)  # May raise too.
 
     def _start_feeding(self, connection_observer, observer_lock):
         """

@@ -3,17 +3,15 @@
 PDU generic module for commands in state PDU.
 """
 
-import six
 import abc
 from moler.cmd.commandtextualgeneric import CommandTextualGeneric
 
 __author__ = 'Marcin Usielski'
-__copyright__ = 'Copyright (C) 2020, Nokia'
+__copyright__ = 'Copyright (C) 2020-2026, Nokia'
 __email__ = 'marcin.usielski@nokia.com'
 
 
-@six.add_metaclass(abc.ABCMeta)
-class GenericPduAten(CommandTextualGeneric):
+class GenericPduAten(CommandTextualGeneric, metaclass=abc.ABCMeta):
     def __init__(self, connection, prompt=None, newline_chars=None, runner=None):
         """
         Base class for Aten PDU commands in all states.

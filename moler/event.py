@@ -1,14 +1,13 @@
 # -*- coding: utf-8 -*-
 
 __author__ = "Michal Ernst, Marcin Usielski"
-__copyright__ = "Copyright (C) 2018-2024, Nokia"
+__copyright__ = "Copyright (C) 2018-2026, Nokia"
 __email__ = "michal.ernst@nokia.com, marcin.usielski@nokia.com"
 
 import abc
 import functools
 import logging
 from typing import Optional
-import six
 
 from moler.abstract_moler_connection import AbstractMolerConnection
 from moler.runner import ConnectionObserverRunner
@@ -17,8 +16,7 @@ from moler.exceptions import MolerException, ResultAlreadySet
 from moler.helpers import instance_id
 
 
-@six.add_metaclass(abc.ABCMeta)
-class Event(ConnectionObserver):
+class Event(ConnectionObserver, metaclass=abc.ABCMeta):
     def __init__(self, connection: Optional[AbstractMolerConnection] = None, till_occurs_times: int = -1, runner: Optional[ConnectionObserverRunner] = None):
         """
 

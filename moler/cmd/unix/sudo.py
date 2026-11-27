@@ -4,11 +4,10 @@ Sudo command module.
 """
 
 __author__ = 'Marcin Usielski'
-__copyright__ = 'Copyright (C) 2018-2024, Nokia'
+__copyright__ = 'Copyright (C) 2018-2026, Nokia'
 __email__ = 'marcin.usielski@nokia.com'
 
 import re
-import six
 
 from moler.cmd.commandchangingprompt import CommandChangingPrompt
 from moler.exceptions import CommandFailure
@@ -54,7 +53,7 @@ class Sudo(CommandChangingPrompt):
                                    allowed_newline_after_prompt=allowed_newline_after_prompt,
                                    prompt_after_login=prompt_after_login)
 
-        if isinstance(password, six.string_types):
+        if isinstance(password, str):
             self.password = [password]
         elif password is None:
             self.password = []

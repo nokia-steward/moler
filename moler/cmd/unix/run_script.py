@@ -4,13 +4,11 @@ Run script command
 """
 
 __author__ = "Marcin Usielski"
-__copyright__ = "Copyright (C) 2018-2021, Nokia"
+__copyright__ = "Copyright (C) 2018-2026, Nokia"
 __email__ = "marcin.usielski@nokia.com"
 
 
 import re
-
-import six
 
 from moler.cmd.unix.genericunix import GenericUnixCommand
 from moler.exceptions import CommandFailure, ParsingDone
@@ -89,7 +87,7 @@ class RunScript(GenericUnixCommand):
     def _copy_list(self, src):
         if src is None:
             ret = []
-        elif isinstance(src, six.string_types):
+        elif isinstance(src, str):
             ret = [src]
         elif isinstance(src, list) or isinstance(src, tuple):
             ret = copy_list(src, deep_copy=False)
@@ -97,7 +95,7 @@ class RunScript(GenericUnixCommand):
             ret = [src]
 
         ret_val = [
-            re.compile(val) if isinstance(val, six.string_types) else val for val in ret
+            re.compile(val) if isinstance(val, str) else val for val in ret
         ]
         return ret_val
 

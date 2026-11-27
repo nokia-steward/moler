@@ -4,11 +4,11 @@ Iperf3 command test module.
 """
 
 __author__ = "Kacper Kozik, Marcin Usielski"
-__copyright__ = "Copyright (C) 2023-2024, Nokia"
+__copyright__ = "Copyright (C) 2023-2026, Nokia"
 __email__ = "kacper.kozik@nokia.com, marcin.usielski@nokia.com"
 
 import pytest
-import mock
+from unittest import mock
 import time
 import platform
 from moler.cmd.unix.iperf3 import Iperf3

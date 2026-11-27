@@ -1,3 +1,9 @@
+## moler (unreleased)
+ * Python >= 3.10 is required, Python 3.15 added to supported versions
+ * Removed dependencies: six, importlib-metadata, mock (unittest.mock is used)
+ * Removed code for old, unsupported Pythons (below 3.10)
+ * asyncio: replaced APIs removed in newer Pythons (asyncio.Task.all_tasks, gather(loop=...), get_child_watcher)
+
 ## moler 4.13.1
 * Preserve log paths when building compression commands
 

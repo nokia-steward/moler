@@ -3,7 +3,7 @@
 asyncio.network_down_detector.py
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-A fully-functional connection-observer using asyncio. Requires Python 3.6+.
+A fully-functional connection-observer using asyncio. Requires Python 3.10+.
 
 This example demonstrates basic concept of connection observer - entity
 that is fully responsible for:
@@ -18,7 +18,7 @@ Another words - low level manual combining of all the pieces.
 """
 
 __author__ = 'Grzegorz Latuszek'
-__copyright__ = 'Copyright (C) 2018, Nokia'
+__copyright__ = 'Copyright (C) 2018-2026, Nokia'
 __email__ = 'grzegorz.latuszek@nokia.com'
 
 import asyncio
@@ -91,7 +91,8 @@ if __name__ == '__main__':
         datefmt='%H:%M:%S',
         stream=sys.stderr,
     )
-    event_loop = asyncio.get_event_loop()
+    event_loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(event_loop)
     server_address = ('127.0.0.1', 5678)
     servers = start_ping_servers([(server_address, '10.0.2.15')])
     try:

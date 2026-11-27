@@ -420,8 +420,5 @@ async def run_command(cmd, cwd):
 
 
 if __name__ == '__main__':
-    loop = asyncio.get_event_loop()
-
-    loop.run_until_complete(terminal_io_test())
-    loop.close()
+    asyncio.run(terminal_io_test())
     print("ls done")

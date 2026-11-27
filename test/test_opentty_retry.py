@@ -7,7 +7,7 @@ __email__ = "marcin.usielski@nokia.com"
 
 import sys
 
-import mock
+from unittest import mock
 import pytest
 
 from moler.io.raw import opentty_retry as pty_mod

@@ -2,13 +2,13 @@ from importlib import import_module
 from os import path, walk
 from os.path import isfile, join, abspath, dirname
 
-from mock import mock
+from unittest import mock
 from pytest import mark, raises
 
 from moler.command import Command
 
 __author__ = 'Michal Plichta, Michal Ernst'
-__copyright__ = 'Copyright (C) 2018-2019, Nokia'
+__copyright__ = 'Copyright (C) 2018-2026, Nokia'
 __email__ = 'michal.plichta@nokia.com, michal.ernst@nokia.com'
 
 cmd_dir_under_test = 'moler/cmd/'
@@ -108,7 +108,6 @@ def test_walk_moler_python_files_is_generator_return_all_files_in_dir():
 
 def test_walk_moler_commands_is_generator_return_all_files_in_dir():
     from moler.util.cmds_events_doc import _walk_moler_commands
-    from six.moves import zip
 
     file_list = _list_in_path(listing_type='only_py')
     abs_test_path = join(repo_path, cmd_dir_under_test)
@@ -212,8 +211,11 @@ def test_create_command_raise_exception_when_object_takes_no_params(fake_cmd):
     with raises(Exception) as exc:
         _create_command(fake_cmd, _buffer_connection().moler_connection, {})
 
-    assert "via FakeCommand() : object() takes no parameters" or "via FakeCommand() : this constructor takes no arguments" in str(
-        exc.value)
+    error_msg = str(exc.value)
+    assert "Can't create command instance via FakeCommand()" in error_msg
+    # wording of TypeError differs between Python versions
+    assert any(reason in error_msg for reason in ("takes no parameters",
+                                                  "takes no arguments"))
 
 
 def test_create_command_success(nice_cmd):

@@ -12,8 +12,6 @@ import functools
 import logging
 import threading
 
-import six
-
 from moler.config import devices as devices_config
 from moler.device.abstract_device import AbstractDevice
 from moler.exceptions import WrongUsage
@@ -181,7 +179,7 @@ class DeviceFactory:
                 f"START creating device {new_name} from {source_device}"
             )
             source_device_name = source_device
-            if isinstance(source_device, six.string_types):
+            if isinstance(source_device, str):
                 source_device = cls._get_device_without_lock(
                     name=source_device,
                     device_class=None,

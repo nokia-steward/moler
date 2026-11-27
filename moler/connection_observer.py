@@ -15,8 +15,6 @@ import traceback
 from abc import ABCMeta, abstractmethod
 from typing import Optional
 
-from six import add_metaclass
-
 from moler.abstract_moler_connection import AbstractMolerConnection
 from moler.command_scheduler import CommandScheduler
 from moler.exceptions import (
@@ -41,8 +39,7 @@ from moler.util.connection_observer_life_status import ConnectionObserverLifeSta
 from moler.util.loghelper import log_into_logger
 
 
-@add_metaclass(ABCMeta)
-class ConnectionObserver:
+class ConnectionObserver(metaclass=ABCMeta):
 
     """Base class for all events and commands that are to be observed on connection."""
 
@@ -229,9 +226,9 @@ class ConnectionObserver:
                 self, self.timeout, "before run", "timeout is not positive value"
             )
 
-    def __iter__(self):  # Python 3.4 support - do we need it?
+    def __iter__(self):
         """
-        Implement iterator protocol to support 'yield from' in @asyncio.coroutine
+        Implement iterator protocol (used by __await__ to support 'await' on connection observer)
         :return:
         """
         if self._future is None:

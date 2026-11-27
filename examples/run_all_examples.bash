@@ -12,7 +12,7 @@ do
     echo "**********************************************************************************"
 
     export PYTHONPATH=$MOLER_REPO_DIR:$PYTHONPATH
-    python3.6 $file
+    python3 $file
     single_example_exit_status=$?
 
     if [ $single_example_exit_status != 0 ]

@@ -2,15 +2,13 @@
 """External-IO connections based on pyhon subprocess module."""
 
 __author__ = 'Michal Plichta'
-__copyright__ = 'Copyright (C) 2018, Nokia'
+__copyright__ = 'Copyright (C) 2018-2026, Nokia'
 __email__ = 'michal.plichta@nokia.com'
 
 import abc
-import six
 
 
-@six.add_metaclass(abc.ABCMeta)
-class Subprocess:
+class Subprocess(metaclass=abc.ABCMeta):
 
     def start(self):
         pass
@@ -31,8 +29,7 @@ class Subprocess:
         pass
 
 
-@six.add_metaclass(abc.ABCMeta)
-class ThreadedSubprocess(Subprocess):
+class ThreadedSubprocess(Subprocess, metaclass=abc.ABCMeta):
 
     def open(self):
         pass

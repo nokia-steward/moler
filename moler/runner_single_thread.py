@@ -382,7 +382,7 @@ class RunnerSingleThread(ConnectionObserverRunner):
                     moler_connection.unsubscribe_connection_observer(
                         connection_observer=connection_observer
                     )
-            self._to_remove_connection_observers = []  # clear() is not available under old Pythons.
+            self._to_remove_connection_observers.clear()
 
     def _start_command(self, connection_observer):
         """

@@ -9,7 +9,7 @@ __email__ = 'grzegorz.latuszek@nokia.com, marcin.usielski@nokia.com'
 
 import copy
 
-import mock
+from unittest import mock
 import pytest
 import re
 from moler.exceptions import WrongUsage
@@ -17,7 +17,7 @@ from moler.exceptions import WrongUsage
 
 def test_instance_id_returns_id_in_hex_form_without_0x():
     from moler.helpers import instance_id
-    from six.moves import builtins
+    import builtins
     # 0xf0a1 == 61601 decimal
     with mock.patch.object(builtins, "id", return_value=61601):
         instance = "moler object"

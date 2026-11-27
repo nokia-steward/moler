@@ -21,7 +21,7 @@ Otherwise you need to do OS and Python adaptation by yourself.
 * for experiment with running 'ifconfig' command we need to know it's location
   * as root fire command 'which ifconfig'; my output is '/sbin/ifconfig'; add to /etc/sudoers.d/moler commented line:
     #moler  ALL=(ALL) /sbin/ifconfig
-* for running python I use python3.6 as /usr/bin/python3 - you may need to change symbolic link, mine was:
+* for running python I use python3 (3.10 or newer) as /usr/bin/python3 - you may need to change symbolic link, mine was:
   sudo ln -sf /opt/ute/python3/bin/python3 /usr/bin/python3
 * logs creation assumes specific location so, replicate moler repository in same directory:
   cd /home/moler

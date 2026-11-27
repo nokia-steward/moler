@@ -4,17 +4,15 @@ Generic Unix/Linux module
 """
 
 __author__ = 'Michal Ernst'
-__copyright__ = 'Copyright (C) 2019, Nokia'
+__copyright__ = 'Copyright (C) 2019-2026, Nokia'
 __email__ = 'michal.ernst@nokia.com'
 
 import abc
-import six
 from moler.events.textualevent import TextualEvent
 from moler.helpers import remove_all_known_special_chars
 
 
-@six.add_metaclass(abc.ABCMeta)
-class GenericUnixTextualEvent(TextualEvent):
+class GenericUnixTextualEvent(TextualEvent, metaclass=abc.ABCMeta):
 
     def _decode_line(self, line):
         """

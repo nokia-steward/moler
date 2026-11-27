@@ -22,7 +22,7 @@ import threading
 import time
 import logging
 import datetime
-from six.moves.queue import Queue, Empty
+from queue import Queue, Empty
 
 from moler.io.io_connection import IOConnection
 from moler.io.raw import TillDoneThread

@@ -4,13 +4,11 @@ Base class for telnet and ssh commands.
 """
 
 __author__ = "Marcin Usielski, Tomasz Krol"
-__copyright__ = "Copyright (C) 2019-2024, Nokia"
+__copyright__ = "Copyright (C) 2019-2026, Nokia"
 __email__ = "marcin.usielski@nokia.com, tomasz.krol@nokia.com"
 
 import abc
 import re
-
-import six
 
 from moler.cmd.commandchangingprompt import CommandChangingPrompt
 from moler.exceptions import CommandFailure, ParsingDone
@@ -18,8 +16,7 @@ from moler.helpers import copy_list
 from moler.util.converterhelper import ConverterHelper
 
 
-@six.add_metaclass(abc.ABCMeta)
-class GenericTelnetSsh(CommandChangingPrompt):
+class GenericTelnetSsh(CommandChangingPrompt, metaclass=abc.ABCMeta):
     """Base class for telnet and ssh commands."""
 
     # Compiled regexp
@@ -117,7 +114,7 @@ class GenericTelnetSsh(CommandChangingPrompt):
         self.add_failure_indication(fail_ind)
 
         self.login = login
-        if isinstance(password, six.string_types):
+        if isinstance(password, str):
             self._passwords = [password]
         elif password is None:
             self._passwords = []

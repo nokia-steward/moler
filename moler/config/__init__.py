@@ -8,7 +8,6 @@ __email__ = "grzegorz.latuszek@nokia.com, marcin.usielski@nokia.com, michal.erns
 import os
 from contextlib import contextmanager
 
-import six
 import yaml
 
 from moler.config import connections as conn_cfg
@@ -94,7 +93,7 @@ def load_config(config=None, from_env_var=None, *args, **kwargs):
         if not configs_are_same(config_list=loaded_config, config_to_find=config):
             loaded_config.append(config)
 
-    wrong_type_config = not isinstance(config, six.string_types) and not isinstance(
+    wrong_type_config = not isinstance(config, str) and not isinstance(
         config, dict
     )
     if config is None and from_env_var is None:
@@ -110,7 +109,7 @@ def load_config(config=None, from_env_var=None, *args, **kwargs):
             raise KeyError(f"Environment variable '{from_env_var}' is not set")
         path = os.environ[from_env_var]
         config = read_yaml_configfile(path)
-    elif isinstance(config, six.string_types):
+    elif isinstance(config, str):
         path = config
         config = read_yaml_configfile(path)
     # TODO: check schema

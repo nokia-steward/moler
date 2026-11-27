@@ -3,7 +3,7 @@
 Testing of Scheduler.
 """
 __author__ = 'Marcin Usielski'
-__copyright__ = 'Copyright (C) 2018, Nokia'
+__copyright__ = 'Copyright (C) 2018-2026, Nokia'
 __email__ = 'marcin.usielski@nokia.com'
 
 from moler.scheduler import Scheduler
@@ -11,7 +11,6 @@ from moler.exceptions import WrongUsage
 from moler.util.moler_test import MolerTest
 import time
 import pytest
-import sys
 import platform
 import asyncio
 
@@ -102,7 +101,6 @@ def test_thread_test_job():
 
 
 
-@pytest.mark.skipif(sys.version_info < (3, 9), reason="Apscheduler")
 def test_asyncio_test_job():
     try:
         loop = asyncio.get_running_loop()

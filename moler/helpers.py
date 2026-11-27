@@ -18,7 +18,6 @@ from functools import wraps
 from math import isclose
 from types import FunctionType, MethodType
 
-from six import string_types, integer_types
 from typing import List, Optional, Tuple
 from moler.exceptions import MolerException
 
@@ -477,7 +476,7 @@ def convert_to_int(obj, none_if_cannot_convert: bool = False):
     :param obj: object to convert
     :param none_if_cannot_convert: If True and obj is not int then return None
     """
-    if isinstance(obj, (string_types, integer_types)):
+    if isinstance(obj, (str, int)):
         try:
             return int(obj)
         except ValueError:

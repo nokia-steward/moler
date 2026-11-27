@@ -4,11 +4,11 @@ RunSerialProxy command test module.
 """
 
 __author__ = 'Grzegorz Latuszek'
-__copyright__ = 'Copyright (C) 2020, Nokia'
+__copyright__ = 'Copyright (C) 2020-2026, Nokia'
 __email__ = 'grzegorz.latuszek@nokia.com'
 
 import pytest
-import mock
+from unittest import mock
 import time
 from moler.exceptions import CommandFailure
 from moler.cmd.unix.run_serial_proxy import RunSerialProxy

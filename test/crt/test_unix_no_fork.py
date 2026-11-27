@@ -9,7 +9,6 @@ import subprocess
 import pytest
 import tempfile
 import os
-import six
 import getpass
 import platform
 from moler.device.unixlocal import UnixLocal
@@ -135,7 +134,7 @@ def test_cp_md5sum_cat_mv_rm_ls(unix_terminal):
     f = tempfile.NamedTemporaryFile(delete=False)
     file_content = "content"
     md5sum = "f75b8179e4bbe7e2b4a074dcef62de95"
-    data = six.b(file_content + "\n")
+    data = (file_content + "\n").encode("utf-8")
     f.write(data)
     src = f.name
     f.close()

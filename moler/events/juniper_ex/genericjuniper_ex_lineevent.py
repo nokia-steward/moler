@@ -4,17 +4,15 @@ Generic Juniper_Ex module
 """
 
 __author__ = 'Michal Ernst'
-__copyright__ = 'Copyright (C) 2019, Nokia'
+__copyright__ = 'Copyright (C) 2019-2026, Nokia'
 __email__ = 'michal.ernst@nokia.com'
 
 import abc
-import six
 import datetime
 from moler.events.lineevent import LineEvent
 
 
-@six.add_metaclass(abc.ABCMeta)
-class GenericJuniperExLineEvent(LineEvent):
+class GenericJuniperExLineEvent(LineEvent, metaclass=abc.ABCMeta):
     pass
 
 

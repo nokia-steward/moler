@@ -4,7 +4,7 @@ Testing possibilities to configure connections
 """
 
 __author__ = 'Grzegorz Latuszek, Michal Ernst'
-__copyright__ = 'Copyright (C) 2018, Nokia'
+__copyright__ = 'Copyright (C) 2018-2026, Nokia'
 __email__ = 'grzegorz.latuszek@nokia.com, michal.ernst@nokia.com'
 
 import os
@@ -168,7 +168,7 @@ def test_load_config_checks_env_variable_existence(moler_config):
 
 @pytest.fixture
 def moler_config():
-    import mock
+    from unittest import mock
     import moler.config as moler_cfg
     import moler.config.connections as conn_cfg
 
@@ -184,7 +184,7 @@ def moler_config():
 
 @pytest.fixture
 def connections_config():
-    import mock
+    from unittest import mock
     import moler.config.connections as conn_cfg
 
     with mock.patch.object(conn_cfg, "default_variant", {}):

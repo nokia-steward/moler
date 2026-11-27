@@ -11,16 +11,15 @@ Main focus is on runner and it's correctness.
 """
 
 __author__ = 'Grzegorz Latuszek'
-__copyright__ = 'Copyright (C) 2018, Nokia'
+__copyright__ = 'Copyright (C) 2018-2026, Nokia'
 __email__ = 'grzegorz.latuszek@nokia.com'
 
 import re
 import threading
 import time
-import platform
 import importlib
 import asyncio
-import mock
+from unittest import mock
 import pytest
 import contextlib
 import datetime
@@ -701,10 +700,6 @@ async def test_wait_for__prohibited_inside_async_def_speaks_in_observer_API(asyn
 
 # --------------------------- resources ---------------------------
 
-def is_python36_or_above():
-    (ver_major, ver_minor, _) = platform.python_version().split('.')
-    return (ver_major == '3') and (int(ver_minor) >= 6)
-
 
 # bg_runners may be called from both 'async def' and raw 'def' functions
 available_bg_runners = []  # 'runner.ThreadPoolExecutorRunner']
@@ -713,13 +708,12 @@ available_bg_runners = ['runner.ThreadPoolExecutorRunner']
 available_standalone_runners = ['runner.ThreadPoolExecutorRunner']
 # async_runners may be called only from 'async def' functions and require already running events-loop
 available_async_runners = []
-if is_python36_or_above():
-    available_bg_runners.append('asyncio_runner.AsyncioRunner')
-    available_async_runners.append('asyncio_runner.AsyncioRunner')
-    # available_bg_runners.append('asyncio_runner.AsyncioInThreadRunner')
-    # available_async_runners.append('asyncio_runner.AsyncioInThreadRunner')
-    # available_standalone_runners.append('asyncio_runner.AsyncioInThreadRunner')
-    pass
+
+available_bg_runners.append('asyncio_runner.AsyncioRunner')
+available_async_runners.append('asyncio_runner.AsyncioRunner')
+# available_bg_runners.append('asyncio_runner.AsyncioInThreadRunner')
+# available_async_runners.append('asyncio_runner.AsyncioInThreadRunner')
+# available_standalone_runners.append('asyncio_runner.AsyncioInThreadRunner')
 
 
 @pytest.fixture(params=available_bg_runners)

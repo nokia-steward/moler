@@ -1,18 +1,16 @@
 # -*- coding: utf-8 -*-
 
 __author__ = 'Marcin Usielski, Michal Ernst'
-__copyright__ = 'Copyright (C) 2018-2024, Nokia'
+__copyright__ = 'Copyright (C) 2018-2026, Nokia'
 __email__ = 'marcin.usielski@nokia.com, michal.ernst@nokia.com'
 
 import abc
-import six
 import logging
 from moler.event import Event
 from moler.cmd import RegexHelper
 
 
-@six.add_metaclass(abc.ABCMeta)
-class TextualEvent(Event):
+class TextualEvent(Event, metaclass=abc.ABCMeta):
     _default_newline_chars = ("\n", "\r")  # New line chars on device, not system with script!
 
     def __init__(self, connection=None, till_occurs_times=-1, runner=None):

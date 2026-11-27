@@ -49,16 +49,38 @@ jobs:
             id -u "$name" >/dev/null 2>&1 || sudo useradd "$name" -c "$comment" -s /bin/bash -l -m
             echo "$name:$password" | sudo chpasswd
           }
+          setup_ssh_key() {
+            local user=$1 authorize=$2
+            local home group
+            home=$(getent passwd "$user" | cut -d: -f6)
+            group=$(id -gn "$user")
+            sudo install -d -m 700 -o "$user" -g "$group" "$home/.ssh"
+            sudo install -m 600 -o "$user" -g "$group" /tmp/moler_ci_key "$home/.ssh/id_ed25519"
+            sudo install -m 644 -o "$user" -g "$group" /tmp/moler_ci_key.pub "$home/.ssh/id_ed25519.pub"
+            if [ "$authorize" = yes ]; then
+              sudo install -m 600 -o "$user" -g "$group" /tmp/moler_ci_key.pub "$home/.ssh/authorized_keys"
+            fi
+          }
           retry sh -c 'sudo apt-get update && sudo apt-get -y install sshpass'
           cat /etc/passwd | grep home
           retry create_user molerssh MolerSshTest moler_password
           retry create_user sshproxy Proxy4SshTest proxy_password
           retry create_user adbshell AdbShell4SshTest adb_password
           cat /etc/passwd | grep home
-          echo ---- try logging as integration tests users via ssh
-          retry sshpass -p moler_password ssh -oStrictHostKeyChecking=no molerssh@localhost pwd
-          retry sshpass -p proxy_password ssh -oStrictHostKeyChecking=no sshproxy@localhost pwd
-          retry sshpass -p adb_password ssh -oStrictHostKeyChecking=no adbshell@localhost pwd
+          echo ---- set up ssh keys for integration tests users
+          rm -f /tmp/moler_ci_key /tmp/moler_ci_key.pub
+          ssh-keygen -q -t ed25519 -N '' -f /tmp/moler_ci_key
+          setup_ssh_key "$(whoami)" no
+          setup_ssh_key molerssh yes
+          setup_ssh_key sshproxy yes
+          setup_ssh_key adbshell yes
+          echo ---- try logging as integration tests users via ssh keys
+          ssh_opts="-o BatchMode=yes -o StrictHostKeyChecking=no"
+          retry ssh $ssh_opts molerssh@localhost pwd
+          retry ssh $ssh_opts sshproxy@localhost pwd
+          retry ssh $ssh_opts adbshell@localhost pwd
+          retry sudo -u sshproxy ssh $ssh_opts molerssh@localhost pwd
+          retry sudo -u molerssh ssh $ssh_opts adbshell@localhost pwd
       - name:  Upload adb simulator
         if: matrix.os == 'ubuntu-latest'
         run: |

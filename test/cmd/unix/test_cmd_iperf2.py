@@ -4,11 +4,11 @@ Iperf2 command test module.
 """
 
 __author__ = 'Grzegorz Latuszek'
-__copyright__ = 'Copyright (C) 2019, Nokia'
+__copyright__ = 'Copyright (C) 2019-2026, Nokia'
 __email__ = 'grzegorz.latuszek@nokia.com'
 
 import pytest
-import mock
+from unittest import mock
 import platform
 from moler.cmd.unix.iperf2 import Iperf2
 from moler.exceptions import CommandFailure,CommandTimeout

@@ -4,18 +4,16 @@ Generic Shared module
 """
 
 __author__ = 'Michal Ernst'
-__copyright__ = 'Copyright (C) 2019, Nokia'
+__copyright__ = 'Copyright (C) 2019-2026, Nokia'
 __email__ = 'michal.ernst@nokia.com'
 
 import abc
-import six
 import datetime
 from moler.events.lineevent import LineEvent
 from moler.helpers import remove_all_known_special_chars
 
 
-@six.add_metaclass(abc.ABCMeta)
-class GenericSharedLineEvent(LineEvent):
+class GenericSharedLineEvent(LineEvent, metaclass=abc.ABCMeta):
 
     def _decode_line(self, line):
         """

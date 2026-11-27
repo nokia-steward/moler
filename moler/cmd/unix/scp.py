@@ -5,13 +5,11 @@ SCP command module.
 
 import re
 
-import six
-
 from moler.cmd.unix.genericunix import GenericUnixCommand
 from moler.exceptions import CommandFailure, ParsingDone
 
 __author__ = "Sylwester Golonka, Marcin Usielski, Michal Ernst"
-__copyright__ = "Copyright (C) 2018-2023, Nokia"
+__copyright__ = "Copyright (C) 2018-2026, Nokia"
 __email__ = (
     "sylwester.golonka@nokia.com, marcin.usielski@nokia.com, michal.ernst@nokia.com"
 )
@@ -62,7 +60,7 @@ class Scp(GenericUnixCommand):
         self._sent_password = False
         self._sent_continue_connecting = False
         self._hosts_file = ""
-        if isinstance(password, six.string_types):
+        if isinstance(password, str):
             self._passwords = [password]
         else:
             self._passwords = list(password)  # copy of list of passwords to modify

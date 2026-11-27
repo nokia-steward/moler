@@ -19,7 +19,7 @@ import sys
 import threading
 import traceback
 from logging.handlers import RotatingFileHandler, TimedRotatingFileHandler
-from importlib_metadata import version, PackageNotFoundError, distributions
+from importlib.metadata import version, PackageNotFoundError, distributions
 from pprint import pformat
 
 

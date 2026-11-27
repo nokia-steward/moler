@@ -4,11 +4,11 @@ Testing connection observer runner
 """
 
 __author__ = 'Grzegorz Latuszek'
-__copyright__ = 'Copyright (C) 2019, Nokia'
+__copyright__ = 'Copyright (C) 2019-2026, Nokia'
 __email__ = 'grzegorz.latuszek@nokia.com'
 
 import time
-import mock
+from unittest import mock
 
 import pytest
 from moler.threaded_moler_connection import ThreadedMolerConnection

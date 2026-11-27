@@ -4,16 +4,16 @@ Tests for utilities related to logging.
 """
 
 __author__ = 'Grzegorz Latuszek, Marcin Usielski'
-__copyright__ = 'Copyright (C) 2019-2023, Nokia'
+__copyright__ = 'Copyright (C) 2019-2026, Nokia'
 __email__ = 'grzegorz.latuszek@nokia.com, marcin.usielski@nokia.com'
 
-import mock
+from unittest import mock
 import sys
 
 
 def test_extracting_caller_code_location():
     from moler.util.loghelper import find_caller
-    if sys.version_info[0] >= 3 and sys.version_info[1] >= 11:
+    if sys.version_info >= (3, 11):
         _level_to_go_up_extra = 1  # For backward compatibility
     else:
         _level_to_go_up_extra = 0

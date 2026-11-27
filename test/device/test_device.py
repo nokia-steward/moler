@@ -4,6 +4,8 @@ __author__ = 'Grzegorz Latuszek, Michal Ernst, Marcin Usielski'
 __copyright__ = 'Copyright (C) 2018-2026, Nokia'
 __email__ = 'grzegorz.latuszek@nokia.com, michal.ernst@nokia.com, marcin.usielski@nokia.com'
 
+from unittest import mock
+
 import pytest
 
 
@@ -164,7 +166,6 @@ def test_device_remove_unlinks_neighbour_devices(buffer_connection):
 
 
 def test_device_remove_calls_removal_callbacks_only_once(buffer_connection):
-    import mock
     from moler.device.unixlocal import UnixLocal
     dev = UnixLocal(io_connection=buffer_connection, name="REMOVE_CALLBACKS")
     callback = mock.Mock()
@@ -196,7 +197,6 @@ def test_device_remove_drops_queued_states_and_waits_for_goto_state_thread(buffe
 
 
 def test_background_goto_state_stops_between_hops_after_remove(buffer_connection):
-    import mock
     import threading
     from moler.device.unixlocal import UnixLocal
     dev = UnixLocal(io_connection=buffer_connection, name="REMOVE_GOTO_HOPS")
@@ -229,7 +229,6 @@ def test_background_goto_state_stops_between_hops_after_remove(buffer_connection
 
 
 def test_device_remove_cancels_observers_to_stop_busy_goto_state_thread(buffer_connection):
-    import mock
     import threading
     import time
     from moler.device.unixlocal import UnixLocal
@@ -266,7 +265,6 @@ def test_device_remove_cancels_observers_to_stop_busy_goto_state_thread(buffer_c
 
 def test_device_remove_gives_up_waiting_for_goto_state_thread_that_cannot_be_stopped(buffer_connection):
     import logging
-    import mock
     import threading
     import time
     from moler.device.unixlocal import UnixLocal
@@ -293,7 +291,6 @@ def test_device_remove_gives_up_waiting_for_goto_state_thread_that_cannot_be_sto
 
 
 def test_device_remove_of_not_established_device_does_not_open_connection(buffer_connection):
-    import mock
     from moler.device.unixlocal import UnixLocal
     dev = UnixLocal(io_connection=buffer_connection, name="REMOVE_NOT_ESTABLISHED")
     assert not dev.has_established_connection()
@@ -306,7 +303,6 @@ def test_device_remove_of_not_established_device_does_not_open_connection(buffer
 
 
 def test_device_remove_shuts_down_moler_connection(buffer_connection):
-    import mock
     from moler.device.unixlocal import UnixLocal
     dev = UnixLocal(io_connection=buffer_connection, name="REMOVE_SHUTDOWN")
     moler_connection = buffer_connection.moler_connection
@@ -318,7 +314,6 @@ def test_device_remove_shuts_down_moler_connection(buffer_connection):
 
 
 def test_device_remove_of_established_device_closes_and_cleans_up(configure_net_1_connection):
-    import mock
     from moler.device.unixlocal import UnixLocal
     from moler.connection_factory import get_connection
     # Unique name so devices leaked by other tests do not share (and keep open) the logger of this test.
@@ -348,7 +343,6 @@ def test_device_remove_of_established_device_closes_and_cleans_up(configure_net_
 
 
 def test_device_remove_closes_connection_directly_if_leaving_states_fails(configure_net_1_connection):
-    import mock
     from moler.device.unixlocal import UnixLocal
     dev = UnixLocal.from_named_connection(connection_name='net_1')
     dev.establish_connection()
@@ -363,7 +357,6 @@ def test_device_remove_closes_connection_directly_if_leaving_states_fails(config
 
 
 def test_device_remove_does_cleanup_even_if_closing_connection_fails(buffer_connection):
-    import mock
     from moler.device.unixlocal import UnixLocal
     dev = UnixLocal(io_connection=buffer_connection, name="REMOVE_CLOSE_FAILS")
     callback = mock.Mock()
@@ -381,7 +374,6 @@ def test_device_remove_does_cleanup_even_if_closing_connection_fails(buffer_conn
 
 
 def test_device_remove_does_not_close_connection_shared_with_neighbour(buffer_connection):
-    import mock
     from moler.device.unixlocal import UnixLocal
     dev1 = UnixLocal(io_connection=buffer_connection, name="REMOVE_SHARED_1")
     dev2 = UnixLocal(io_connection=buffer_connection, name="REMOVE_SHARED_2")
@@ -400,7 +392,6 @@ def test_device_remove_does_not_close_connection_shared_with_neighbour(buffer_co
 
 
 def test_device_remove_of_shared_connection_hands_it_over_to_neighbour(buffer_connection):
-    import mock
     from moler.device.unixlocal import UnixLocal
     dev1 = UnixLocal(io_connection=buffer_connection, name="HAND_OVER_SHARED_1")
     dev2 = UnixLocal(io_connection=buffer_connection, name="HAND_OVER_SHARED_2")
@@ -435,7 +426,6 @@ def test_removed_device_does_not_recover_kept_state(buffer_connection):
 
 
 def test_device_remove_twice_closes_connection_only_once(buffer_connection):
-    import mock
     from moler.device.unixlocal import UnixLocal
     dev = UnixLocal(io_connection=buffer_connection, name="REMOVE_TWICE")
 
@@ -447,7 +437,6 @@ def test_device_remove_twice_closes_connection_only_once(buffer_connection):
 
 
 def test_device_remove_calls_all_removal_callbacks_even_if_one_fails(buffer_connection):
-    import mock
     from moler.device.unixlocal import UnixLocal
     dev = UnixLocal(io_connection=buffer_connection, name="REMOVE_FAILING_CALLBACK")
     failing_callback = mock.Mock(side_effect=RuntimeError("callback failed"))
@@ -465,7 +454,6 @@ def test_device_remove_calls_all_removal_callbacks_even_if_one_fails(buffer_conn
 
 
 def test_device_remove_logs_all_failing_removal_callbacks_and_raises_first(buffer_connection):
-    import mock
     import moler.device.abstract_device as abstract_device
     from moler.device.unixlocal import UnixLocal
     dev = UnixLocal(io_connection=buffer_connection, name="REMOVE_FAILING_CALLBACKS")
@@ -573,7 +561,6 @@ def test_device_exchange_io_connection_releases_old_connection():
 
 
 def test_device_exchange_io_connection_stops_goto_state_thread_before_closing_old_connection():
-    import mock
     import threading
     from moler.device.unixlocal import UnixLocal
     from moler.util.devices_SM import get_memory_device_connection
@@ -612,7 +599,6 @@ def test_device_exchange_io_connection_stops_goto_state_thread_before_closing_ol
 
 
 def test_background_goto_state_stops_between_hops_after_exchange_of_io_connection(buffer_connection):
-    import mock
     import threading
     from moler.device.unixlocal import UnixLocal
     dev = UnixLocal(io_connection=buffer_connection, name="EXCHANGE_GOTO_HOPS")
@@ -720,7 +706,6 @@ def test_device_exchange_io_connection_cancels_observers_created_on_old_connecti
 
 
 def test_device_exchange_io_connection_does_not_close_connection_shared_with_neighbour(buffer_connection):
-    import mock
     from moler.device.unixlocal import UnixLocal
     from moler.util.devices_SM import get_memory_device_connection
     dev1 = UnixLocal(io_connection=buffer_connection, name="EXCHANGE_SHARED_1")
@@ -748,7 +733,6 @@ def test_device_exchange_io_connection_does_not_close_connection_shared_with_nei
 
 
 def test_device_exchange_io_connection_to_the_same_connection_does_nothing():
-    import mock
     from moler.device.unixlocal import UnixLocal
     from moler.util.devices_SM import get_memory_device_connection
     connection = get_memory_device_connection()
@@ -816,7 +800,6 @@ class _ConnectionWithoutUnsubscribe(object):
 
 @pytest.fixture
 def configure_net_1_connection():
-    import mock
     from moler.config import connections as conn_cfg
 
     with mock.patch.object(conn_cfg, "default_variant", {}):

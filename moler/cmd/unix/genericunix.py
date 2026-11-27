@@ -4,13 +4,12 @@ Generic Unix/Linux module
 """
 
 __author__ = 'Marcin Usielski', 'Jakub Kochaniak'
-__copyright__ = 'Copyright (C) 2018-2024, Nokia'
+__copyright__ = 'Copyright (C) 2018-2026, Nokia'
 __email__ = 'marcin.usielski@nokia.com', 'jakub.kochaniak@nokia.com'
 
 import re
 import abc
 from typing import Optional, Union, Pattern, Sequence
-import six
 from moler.abstract_moler_connection import AbstractMolerConnection
 from moler.runner import ConnectionObserverRunner
 from moler.cmd.commandtextualgeneric import CommandTextualGeneric
@@ -26,8 +25,7 @@ cmd_failure_causes = ['not found',
 r_cmd_failure_cause_alternatives = "|".join(cmd_failure_causes)
 
 
-@six.add_metaclass(abc.ABCMeta)
-class GenericUnixCommand(CommandTextualGeneric):
+class GenericUnixCommand(CommandTextualGeneric, metaclass=abc.ABCMeta):
     """GenericUnixCommand is a base class for Unix/Linux commands."""
     # _re_fail = re.compile(r_cmd_failure_cause_alternatives, re.IGNORECASE)
 
